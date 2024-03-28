@@ -1,0 +1,1 @@
+# pastel_standalone_cuda_miner

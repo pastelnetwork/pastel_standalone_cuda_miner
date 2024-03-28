@@ -1,0 +1,60 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build CUDA project: cmake build",
+            "type": "cmake",
+            "command": "build",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": [
+                "$gcc",
+                {
+                    "owner": "cuda",
+                    "fileLocation": [
+                        "relative",
+                        "${workspaceFolder}"
+                    ],
+                    "pattern": [
+                        {
+                            "regexp": "^(?:/?(.*?):(\\d+)(?::(\\d+))?:?)?(\\s*)(?:(error|warning|remark)\\s*?[#]?(\\d+)\\-?(D|W)?)?\\s*(.*)$",
+                            "file": 2,
+                            "line": 3,
+                            "column": 4,
+                            "severity": 5,
+                            "message": 7
+                        }
+                    ]
+                }
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+         {
+            "type": "cppbuild",
+            "label": "C/C++: g++ build active file",
+            "command": "/usr/bin/g++",
+            "args": [
+                "-fdiagnostics-color=always",
+                "-I${workspaceFolder}",
+                "-I${workspaceFolder}/include",
+                "-g",
+                "${file}",
+                "-o",
+                "${fileDirname}/${fileBasenameNoExtension}"
+            ],
+            "options": {
+                "cwd": "${fileDirname}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": "build",
+            "detail": "compiler: /usr/bin/g++",
+        }
+    ]
+}
