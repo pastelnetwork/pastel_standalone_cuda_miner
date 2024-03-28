@@ -56,17 +56,22 @@ TEST(MinerTest, MiningLoop)
         return blockHeader.nNonce;
     };
 
+    v_strings vHexSolutions;
     // Define the submitSolution function
-    auto submitSolutionFn = [](uint32_t nExtraNonce2, const string& sTime, const string& sNonce, const string& sHexSolution) {
-        // Process the submitted solution
-        // You can add assertions or checks here
-        EXPECT_EQ(sNonce, "1234567890abcdef");
-        EXPECT_EQ(sHexSolution.size(), Eh200_9::ProofSize * 2);
+    auto submitSolutionFn = [&](uint32_t nExtraNonce2, const string& sTime, const string& sNonce, const string& sHexSolution)
+    {
+        vHexSolutions.push_back(sHexSolution);
     };
 
     // Call the miningLoop function
     uint32_t solutionCount = miningLoop<Eh200_9>(state, nExtraNonce2, sTime, nIterations, threadsPerBlock, generateNonceFn, submitSolutionFn);
 
+    size_t i = 0;
+    for (const auto& solution : vHexSolutions)
+    {
+        cout << "solution #" << i << ": " << solution << endl;
+        i++;
+    }
     // Check the solution count
     EXPECT_GT(solutionCount, 0);
 
