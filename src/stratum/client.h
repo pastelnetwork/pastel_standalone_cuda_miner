@@ -8,6 +8,7 @@
 
 #include <src/utils/json-rpc-client.h>
 #include <src/equihash/block.h>
+#include <src/equihash/equihash.h>
 
 class CStratumClient
 {

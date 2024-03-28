@@ -11,6 +11,8 @@
 using eh_index = uint32_t;
 using eh_trunc = uint8_t;
 
+constexpr auto DEFAULT_EQUIHASH_PERS_STRING = "ZcashPoW";
+
 /**
  * The Equihash class provides a set of constants and functions for the Equihash proof-of-work algorithm.
  * 
@@ -30,7 +32,8 @@ private:
 public:
     static inline constexpr uint32_t WN = N;
     static inline constexpr uint32_t WK = K;
-    
+    static inline constexpr uint32_t PERS_STRING_LENGTH = 8;
+
     // the number of indices in one equihash solution (2 ^ K)
     static inline constexpr uint32_t ProofSize = 1 << K; // PROOFSIZE=512
     // The number of hash outputs that can be indexed per each hash operation based on N.
@@ -69,8 +72,11 @@ public:
     {
         uint32_t indices[ProofSize];
     } solution;    
-};
 
+    bool InitializeState(blake2b_state &state, const std::string &sPersString);
+
+    bool IsValidSolution(const blake2b_state& base_state, const v_uint8 &soln);
+};
 
 // the maximum number of solutions that can be found by the miner
 constexpr uint32_t MAXSOLUTIONS = 10;

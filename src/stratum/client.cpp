@@ -274,7 +274,7 @@ void CStratumClient::handleMiningNotify(const JsonRpcNotify &notify)
     if (!persString.is_null() && persString.is_string())
         m_sPersString = persString.get<std::string>();
     else
-        m_sPersString = "ZcashPoW";
+        m_sPersString = DEFAULT_EQUIHASH_PERS_STRING;
 
     // mnid string parameter
     m_blockHeader.sPastelID = params[8].get<std::string>();

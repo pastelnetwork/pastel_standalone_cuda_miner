@@ -92,24 +92,18 @@ uint32_t miningLoop(const blake2b_state& initialState, uint32_t &nExtraNonce2, c
 
 void miner(CStratumClient &client)
 {
-    using eh_type = Eh200_9;
-
     // initialize extra nonce with random value
     uint32_t nExtraNonce2_Start = random_uint32();
     const uint32_t extraNonce1 = client.getExtraNonce1();
     uint32_t nExtraNonce2 = nExtraNonce2_Start;
 
     // Initialize and update the first blake2b_state
-    blake2b_state hostInitialState;
     string sPersString = client.getPersString();
-    unsigned char personalization[BLAKE2B_PERSONALBYTES] = {0};
-    memcpy(personalization, sPersString.c_str(), sPersString.size());
-    const uint32_t le_N = htole32(client.getN());
-    const uint32_t le_K = htole32(client.getK());
-    const auto p = &personalization[sPersString.size()];
-    memcpy(p, &le_N, sizeof(le_N));
-    memcpy(p + sizeof(le_N), &le_K, sizeof(le_K));
-    blake2b_init_salt_personal_host(&hostInitialState, nullptr, 0, BLAKE2B_OUTBYTES, nullptr, 0, personalization, BLAKE2B_PERSONALBYTES);
+
+    using eh_type = Eh200_9;
+    auto eh = eh_type();
+    blake2b_state hostInitialState;
+    eh.InitializeState(hostInitialState, sPersString);
     v_uint8 vEquihashInput = client.getEquihashInput();
     blake2b_update_host(&hostInitialState, vEquihashInput.data(), vEquihashInput.size());
 

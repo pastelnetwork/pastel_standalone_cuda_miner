@@ -4,35 +4,9 @@
 #include <memory>
 #include <cstring>
 #include <stdexcept>
-#include <endian.h>
 
 #include <src/utils/sha256.h>
-
-uint32_t static inline ReadBE32(const unsigned char* ptr)
-{
-    uint32_t x;
-    std::memcpy((char*)&x, ptr, 4);
-    return be32toh(x);
-}
-
-uint64_t static inline ReadBE64(const unsigned char* ptr)
-{
-    uint64_t x;
-    std::memcpy((char*)&x, ptr, 8);
-    return be64toh(x);
-}
-
-void static inline WriteBE32(unsigned char* ptr, uint32_t x)
-{
-    uint32_t v = htobe32(x);
-    std::memcpy(ptr, (char*)&v, 4);
-}
-
-void static inline WriteBE64(unsigned char* ptr, uint64_t x)
-{
-    uint64_t v = htobe64(x);
-    std::memcpy(ptr, (char*)&v, 8);
-}
+#include <src/utils/numconvert.h>
 
 // Internal implementation code.
 namespace
