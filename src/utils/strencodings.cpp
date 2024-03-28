@@ -72,3 +72,9 @@ v_uint8 ParseHex(const string& str)
 {
     return ParseHex(str.c_str());
 }
+
+string HexStr(const uint32_t n, bool bSpaces)
+{
+    const auto* bytes = reinterpret_cast<const unsigned char*>(&n);
+    return HexStr(bytes, bytes + sizeof(n), bSpaces);
+}

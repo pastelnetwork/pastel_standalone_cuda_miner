@@ -17,7 +17,8 @@ public:
 
     void handlingLoop();
     void setAuthInfo(const std::string& sLogin, const std::string& sPassword);
-    bool submitSolution(const uint32_t nExtraNonce2, const std::string& sTime, const std::string& sNonce);
+    bool submitSolution(const uint32_t nExtraNonce2, const std::string& sTime, 
+        const std::string& sNonce, const std::string &sHexSolution);
     const uint256& generateNonce(const uint32_t nExtraNonce2) noexcept;
 
     v_uint8 getEquihashInput() const noexcept;

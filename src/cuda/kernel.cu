@@ -15,10 +15,6 @@
 
 using namespace std;
 
-// Constants for tree storage
-constexpr uint32_t BITS_PER_WORD = 32;
-#define BITMAP_SIZE(numNodes) ((numNodes + BITS_PER_WORD - 1) / BITS_PER_WORD)
-
 // Get the number of available CUDA devices
 int getNumCudaDevices()
 {
@@ -54,13 +50,12 @@ __global__ void cudaKernel_generateInitialHashes(const blake2b_state* state, uin
     if (hashIdx < EquihashType::NHashes)
     {
         const uint32_t blockIdx = hashIdx / EquihashType::IndicesPerHashOutput;
-        uint32_t leBlockIdx = htole32(blockIdx);
 
         blake2b_state localState = *state;
-        blake2b_update_device(&localState, reinterpret_cast<uint8_t*>(&leBlockIdx), sizeof(leBlockIdx));
+        blake2b_update_device(&localState, reinterpret_cast<const uint8_t*>(&blockIdx), sizeof(blockIdx));
 
-        uint8_t hash[EquihashType::HashOut];  
-        blake2b_final_device(&localState, hash, EquihashType::HashOut);
+        uint8_t hash[EquihashType::HashOutput];  
+        blake2b_final_device(&localState, hash, EquihashType::HashOutput);
 
         const uint32_t outputIdx = hashIdx * EquihashType::HashWords;
         for (uint32_t i = 0; i < EquihashType::HashWords; ++i)
@@ -75,7 +70,7 @@ void generateInitialHashes(const blake2b_state* devState, uint32_t* devHashes,
     dim3 gridDim((EquihashType::NBlocks + threadsPerBlock - 1) / threadsPerBlock);
     dim3 blockDim(threadsPerBlock);
 
-    cudaKernel_generateInitialHashes<EquihashType><<<gridDim, blockDim>>>(devState, devHashes, EquihashType::IndicesPerHashOutput);
+    cudaKernel_generateInitialHashes<EquihashType><<<gridDim, blockDim>>>(devState, devHashes);
 }
 
 /**
@@ -185,7 +180,7 @@ __global__ void cudaKernel_findSolutions(uint32_t* hashes, uint32_t* slotBitmaps
             // Store the solution indices
             uint32_t indiceIdx = 0;
             uint32_t indiceValue = hashIdx;
-            for (uint32_t i = 0; i < EquihashType::K; ++i)
+            for (uint32_t i = 0; i < EquihashType::WK; ++i)
             {
                 solutions[solutionIdx].indices[indiceIdx] = indiceValue;
                 ++indiceIdx;
@@ -225,29 +220,25 @@ uint32_t findSolutions(uint32_t* devHashes, uint32_t* devSlotBitmaps, typename E
 }
 
 template<typename EquihashType>
-void copySolutionsToHost(typename EquihashType::solution* devSolutions, uint32_t nSolutionCount, v_strings& resultSolutions)
+void copySolutionsToHost(typename EquihashType::solution* devSolutions, const uint32_t nSolutionCount, vector<typename EquihashType::solution> &vHostSolutions)
 {
+    vHostSolutions.clear();
     // Resize the host solutions vector
-    vector<typename EquihashType::solution> vHostSolutions;
     vHostSolutions.resize(nSolutionCount);
 
     // Copy the solutions from device to host
-    copyToHost(vHostSolutions.data(), devSolutions, nSolutionCount * sizeof(EquihashType::solution));
-
-    // Process the solutions and store them in the result solutions vector
-    resultSolutions.clear();
-    resultSolutions.reserve(nSolutionCount);
-
-    for (const auto& solution : vHostSolutions)
-    {
-        // Construct the block header using the solution indices
-        string sHexSolution = HexStr(solution.indices, solution.indices + EquihashType::ProofSize);
-        resultSolutions.push_back(sHexSolution);
-    }
+    copyToHost(vHostSolutions.data(), devSolutions, nSolutionCount * EquihashType::ProofSize);
 }
 
-/*
+// Explicit template instantiation
+template void generateInitialHashes<Eh200_9>(const blake2b_state* devState, uint32_t* devHashes, const uint32_t threadsPerBlock);
+template void detectCollisions<Eh200_9>(uint32_t* devHashes, uint32_t* devSlotBitmaps, const uint32_t threadsPerBlock);
+template void xorCollisions<Eh200_9>(uint32_t* devHashes, uint32_t* devSlotBitmaps, uint32_t* devXoredHashes, const uint32_t threadsPerBlock);
+template uint32_t findSolutions<Eh200_9>(uint32_t* devHashes, uint32_t* devSlotBitmaps, Eh200_9::solution* devSolutions, uint32_t* devSolutionCount, const uint32_t threadsPerBlock);
+template void copySolutionsToHost<Eh200_9>(Eh200_9::solution* devSolutions, const uint32_t nSolutionCount, vector<Eh200_9::solution> &vHostSolutions);
 
+
+/*
 // CUDA kernel to XOR hashes and store index trees
 __global__ void xorHashesKernel(uint32_t* hashes, uint32_t* xoredHashes, uint32_t* indexes, 
                                 uint32_t numHashes, uint32_t threadsPerBlock) 

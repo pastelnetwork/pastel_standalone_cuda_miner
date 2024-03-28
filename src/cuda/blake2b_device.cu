@@ -27,7 +27,7 @@ __constant__ uint64_t blake2b_IV[8] = {
     0x1f83d9abfb41bd6bULL, 0x5be0cd19137e2179ULL
 };
 
-__device__ void secure_zero_memory(void *v, size_t n)
+__device__ void secure_zero_memory_device(void *v, size_t n)
 {
     volatile uint8_t *p = (volatile uint8_t *)v;
     while (n--)
@@ -83,7 +83,7 @@ __device__ void blake2b_increment_counter(blake2b_state *S, uint64_t inc)
     S->t[1] += (S->t[0] < inc);
 }
 
-__device__ void blake2b_init(blake2b_state *S, size_t outlen)
+__device__ void blake2b_init_device(blake2b_state *S, size_t outlen)
 {
     S->h[0] = blake2b_IV[0] ^ (0x01010000 | (outlen << 8));
 
@@ -99,7 +99,7 @@ __device__ void blake2b_init(blake2b_state *S, size_t outlen)
     S->last_node = 0;
 }
 
-__device__ void blake2b_compress(blake2b_state *S, const uint8_t *block)
+__device__ void blake2b_compress_device(blake2b_state *S, const uint8_t *block)
 {
     uint64_t m[16];
     uint64_t v[16];
@@ -136,7 +136,7 @@ __device__ void blake2b_compress(blake2b_state *S, const uint8_t *block)
         S->h[i] ^= v[i] ^ v[i + 8];
 }
 
-__device__ void blake2b_update(blake2b_state *S, const void *pin, size_t inlen)
+__device__ void blake2b_update_device(blake2b_state *S, const void *pin, size_t inlen)
 {
     const uint8_t *in = (const uint8_t *)pin;
 
@@ -147,7 +147,7 @@ __device__ void blake2b_update(blake2b_state *S, const void *pin, size_t inlen)
         memcpy(S->buf + left, in, fill);
         S->buflen += fill;
         blake2b_increment_counter(S, BLAKE2B_BLOCKBYTES);
-        blake2b_compress(S, S->buf);
+        blake2b_compress_device(S, S->buf);
         in += fill;
         inlen -= fill;
         S->buflen = 0;
@@ -156,7 +156,7 @@ __device__ void blake2b_update(blake2b_state *S, const void *pin, size_t inlen)
     S->buflen += inlen;
 }
 
-__device__ void blake2b_final(blake2b_state *S, void *out, size_t outlen)
+__device__ void blake2b_final_device(blake2b_state *S, void *out, size_t outlen)
 {
     uint8_t buffer[BLAKE2B_OUTBYTES] = {0};
 
@@ -166,24 +166,25 @@ __device__ void blake2b_final(blake2b_state *S, void *out, size_t outlen)
     if (S->buflen > BLAKE2B_BLOCKBYTES)
     {
         blake2b_increment_counter(S, BLAKE2B_BLOCKBYTES);
-        blake2b_compress(S, S->buf);
+        blake2b_compress_device(S, S->buf);
         S->buflen = 0;
     }
     blake2b_increment_counter(S, S->buflen);
     S->f[0] = (uint64_t)-1;
     memset(S->buf + S->buflen, 0, BLAKE2B_BLOCKBYTES - S->buflen);
-    blake2b_compress(S, S->buf);
+    blake2b_compress_device(S, S->buf);
 
     for (int i = 0; i < 8; ++i)
         store64(buffer + sizeof(S->h[i]) * i, S->h[i]);
     memcpy(out, buffer, outlen);
 
     // Clear state
-    secure_zero_memory(buffer, sizeof(buffer));
-    secure_zero_memory(S->buf, sizeof(S->buf));
-    secure_zero_memory(S->h, sizeof(S->h));
-    secure_zero_memory(S->t, sizeof(S->t));
-    secure_zero_memory(S->f, sizeof(S->f));
+    secure_zero_memory_device(buffer, sizeof(buffer));
+    secure_zero_memory_device(S->buf, sizeof(S->buf));
+    secure_zero_memory_device(S->h, sizeof(S->h));
+    secure_zero_memory_device(S->t, sizeof(S->t));
+    secure_zero_memory_device(S->f, sizeof(S->f));
     S->buflen = 0;
     S->last_node = 0;
 }
+

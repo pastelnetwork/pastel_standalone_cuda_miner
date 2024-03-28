@@ -3,6 +3,7 @@
 // file COPYING or https://www.opensource.org/licenses/mit-license.php.
 #pragma once
 #include <cstdint>
+#include <vector>
 
 #include <blake2b.h>
 #include <local_types.h>
@@ -21,4 +22,5 @@ uint32_t findSolutions(uint32_t* devHashes, uint32_t* devSlotBitmaps, typename E
     uint32_t* devSolutionCount, const uint32_t threadsPerBlock);
 
 template<typename EquihashType>
-void copySolutionsToHost(typename EquihashType::solution* devSolutions, const uint32_t nSolutionCount, v_strings& vResultSolutions);
+void copySolutionsToHost(typename EquihashType::solution* devSolutions, const uint32_t nSolutionCount, 
+    std::vector<typename EquihashType::solution>& vHostSolutions);

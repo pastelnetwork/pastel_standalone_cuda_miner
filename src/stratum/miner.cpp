@@ -12,21 +12,6 @@
 
 using namespace std;
 
-// Function to convert solution indices to a hex string
-string GetHexStringFromIndices(const v_uint32& indices)
-{
-    v_uint8 solution;
-    for (const auto& index : indices)
-    {
-        solution.push_back(index & 0xff);
-        solution.push_back((index >> 8) & 0xff);
-        solution.push_back((index >> 16) & 0xff);
-        solution.push_back((index >> 24) & 0xff);
-    }
-
-    return HexStr(solution);
-}
-
 // Function to submit a solution to the pool
 void submitSolution(int sockfd, const char* jobId, const char* workerName, const char* solution)
 {
@@ -43,7 +28,7 @@ void submitSolution(int sockfd, const char* jobId, const char* workerName, const
 
 void miner(CStratumClient &client)
 {
-    using eh_type = Equihash<200, 9>;
+    using eh_type = Eh200_9;
     // constexpr size_t numHashes = numBlocks * eh.IndicesPerHashOutput;
     // constexpr size_t numSlots = numHashes / NSLOTS;
 
@@ -58,6 +43,8 @@ void miner(CStratumClient &client)
     // Allocate device memory for solutions and solution count
     auto devSolutions = make_cuda_unique<eh_type::solution>(MAXSOLUTIONS);
     auto devSolutionCount = make_cuda_unique<uint32_t>(1);
+
+    vector<eh_type::solution> vHostSolutions;
 
     // initialize extra nonce with random value
     uint32_t nExtraNonce2_Start = random_uint32();
@@ -108,15 +95,15 @@ void miner(CStratumClient &client)
         const uint32_t nSolutionCount = findSolutions<eh_type>(devHashes.get(), devSlotBitmaps.get(), 
             devSolutions.get(), devSolutionCount.get(), threadsPerBlock);
 
-        v_strings vResultSolutions;
-        copySolutionsToHost<eh_type>(devSolutions.get(), nSolutionCount, vResultSolutions);
-
+        copySolutionsToHost<eh_type>(devSolutions.get(), nSolutionCount, vHostSolutions);
+        
+        // Process the solutions and store them in the result solutions vector
         // Submit the solutions to the pool
-        for (const auto& solution : vResultSolutions)
+        for (const auto& solution : vHostSolutions)
         {
-            const uint32_t nTime = client.getTime();
-            const auto* timeBytes = reinterpret_cast<const unsigned char*>(&nTime);
-            client.submitSolution(nExtraNonce2, HexStr(timeBytes, timeBytes + sizeof(uint32_t)), client.getNonce().ToString());
+            // Construct the block header using the solution indices
+            string sHexSolution = HexStr(solution.indices, solution.indices + eh_type::ProofSize);
+            client.submitSolution(nExtraNonce2, HexStr(client.getTime()), client.getNonce().ToString(), sHexSolution);
         }
 
         // Check for new job notifications

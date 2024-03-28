@@ -76,61 +76,6 @@ static inline void store64(void *dst, uint64_t w)
     memcpy(dst, &w, sizeof w);
 }
 
-bool blake2b_init_salt_personal_host(blake2b_state *state, 
-    const uint8_t* key, size_t nKeyLength, 
-    size_t outlen,
-    const uint8_t* salt, const size_t nSaltLength,
-    const uint8_t* personal, const size_t nPersonaLength)
-{
-    if (!state || outlen == 0 || outlen > BLAKE2B_OUTBYTES)
-        return false;
-
-    if (key && nKeyLength > BLAKE2B_KEYBYTES)
-        return false;
-
-    if (salt && nSaltLength > BLAKE2B_SALTBYTES)
-        return false;
-
-    if (personal && nPersonaLength > BLAKE2B_PERSONALBYTES) 
-        return false;
-
-    state->h[0] = blake2b_IV[0] ^ (0x01010000 | (nKeyLength << 8) | outlen);
-    state->h[1] = blake2b_IV[1];
-    state->h[2] = blake2b_IV[2];
-    state->h[3] = blake2b_IV[3];
-    state->h[4] = blake2b_IV[4];
-    state->h[5] = blake2b_IV[5];
-    state->h[6] = blake2b_IV[6];
-    state->h[7] = blake2b_IV[7];
-
-    state->t[0] = 0;
-    state->t[1] = 0;
-    state->f[0] = 0;
-    state->f[1] = 0;
-    state->buflen = 0;
-    state->outlen = outlen;
-    state->last_node = 0;
-
-    memset(state->buf, 0, sizeof(state->buf));
-    memset(state->buf, 0, sizeof(state->buf));
-
-    if (nKeyLength > 0)
-    {
-        uint8_t block[BLAKE2B_BLOCKBYTES];
-        memset(block, 0, BLAKE2B_BLOCKBYTES);
-        memcpy(block, key, nKeyLength);
-        blake2b_update_host(state, block, BLAKE2B_BLOCKBYTES);
-        secure_zero_memory(block, BLAKE2B_BLOCKBYTES);
-    }
-
-    if (salt && nSaltLength)
-        blake2b_update_host(state, salt, nSaltLength);
-
-    if (personal && nPersonaLength)
-        blake2b_update_host(state, personal, nPersonaLength);
-
-    return true;
-}
 
 void blake2b_init_host(blake2b_state *S, size_t outlen)
 {
@@ -215,4 +160,60 @@ void blake2b_final_host(blake2b_state *S, void *out, size_t outlen)
     blake2b_compress(S, S->buf);
 
     memcpy(out, &S->h[0], outlen);
+}
+
+bool blake2b_init_salt_personal_host(blake2b_state *state, 
+    const uint8_t* key, size_t nKeyLength, 
+    size_t outlen,
+    const uint8_t* salt, const size_t nSaltLength,
+    const uint8_t* personal, const size_t nPersonaLength)
+{
+    if (!state || outlen == 0 || outlen > BLAKE2B_OUTBYTES)
+        return false;
+
+    if (key && nKeyLength > BLAKE2B_KEYBYTES)
+        return false;
+
+    if (salt && nSaltLength > BLAKE2B_SALTBYTES)
+        return false;
+
+    if (personal && nPersonaLength > BLAKE2B_PERSONALBYTES) 
+        return false;
+
+    state->h[0] = blake2b_IV[0] ^ (0x01010000 | (nKeyLength << 8) | outlen);
+    state->h[1] = blake2b_IV[1];
+    state->h[2] = blake2b_IV[2];
+    state->h[3] = blake2b_IV[3];
+    state->h[4] = blake2b_IV[4];
+    state->h[5] = blake2b_IV[5];
+    state->h[6] = blake2b_IV[6];
+    state->h[7] = blake2b_IV[7];
+
+    state->t[0] = 0;
+    state->t[1] = 0;
+    state->f[0] = 0;
+    state->f[1] = 0;
+    state->buflen = 0;
+    state->outlen = outlen;
+    state->last_node = 0;
+
+    memset(state->buf, 0, sizeof(state->buf));
+    memset(state->buf, 0, sizeof(state->buf));
+
+    if (nKeyLength > 0)
+    {
+        uint8_t block[BLAKE2B_BLOCKBYTES];
+        memset(block, 0, BLAKE2B_BLOCKBYTES);
+        memcpy(block, key, nKeyLength);
+        blake2b_update_host(state, block, BLAKE2B_BLOCKBYTES);
+        secure_zero_memory(block, BLAKE2B_BLOCKBYTES);
+    }
+
+    if (salt && nSaltLength)
+        blake2b_update_host(state, salt, nSaltLength);
+
+    if (personal && nPersonaLength)
+        blake2b_update_host(state, personal, nPersonaLength);
+
+    return true;
 }

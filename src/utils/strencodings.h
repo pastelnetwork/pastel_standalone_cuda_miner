@@ -29,10 +29,12 @@ std::string HexStr(const T itbegin, const T itend, bool fSpaces=false)
 }
 
 template<typename T>
-inline std::string HexStr(const T& vch, bool fSpaces=false)
+inline std::string HexStr(const T& vch, bool fSpaces = false)
 {
     return HexStr(vch.cbegin(), vch.cend(), fSpaces);
 }
+
+std::string HexStr(const uint32_t n, bool bSpaces = false);
 
 bool IsHex(const std::string& str) noexcept;
 

@@ -145,12 +145,32 @@ bool CStratumClient::reconnect()
     return true;
 }
 
-bool CStratumClient::submitSolution(const uint32_t nExtraNonce2, const string& sTime, const string& sNonce)
+/**
+ * Submit a solution to the pool.
+ * 
+ * mining.submit("workerName", "job id", "ExtraNonce2", "nTime", "nOnce")
+ * 
+ * Parameters:
+ *   workerName - the name of the worker
+ *   jobId - the job ID
+ *   ExtraNonce2 - the extra nonce 2 value
+ *   nTime - the time value
+ *   nNonce - the nonce value
+ * 
+ * \param nExtraNonce2 
+ * \param sTime 
+ * \param sNonce 
+ * \param sHexSolution 
+ * \return true 
+ * \return false 
+ */
+bool CStratumClient::submitSolution(const uint32_t nExtraNonce2, const string& sTime, 
+    const string& sNonce, const string &sHexSolution)
 {
     if (!m_bConnected)
         return false;
 
-    auto params = json::array({m_sWorkerName, m_sJobId, to_string(nExtraNonce2), sTime, sNonce});
+    auto params = json::array({m_sWorkerName, m_sJobId, HexStr(nExtraNonce2), sTime, sNonce, sHexSolution});
     bool bResult = m_JsonRpcClient.CallMethod<bool>(++m_nRequestId, "mining.submit", params);
     if (bResult)
         cout << "Solution accepted by the pool" << endl;

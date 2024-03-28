@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://www.opensource.org/licenses/mit-license.php.
 #include <src/cuda/memutils.h>
+#include <src/equihash/equihash.h>
 #include <blake2b.h>
 
 using namespace std;
@@ -48,3 +49,7 @@ unique_ptr<T, CudaDeleter> make_cuda_unique(const size_t numElements)
     cudaMalloc(&ptr, numElements * sizeof(T));
     return unique_ptr<T, CudaDeleter>(ptr);
 }
+
+template std::unique_ptr<uint32_t, CudaDeleter> make_cuda_unique<uint32_t>(const size_t numElements);
+template std::unique_ptr<blake2b_state, CudaDeleter> make_cuda_unique<blake2b_state>(const size_t numElements);
+template std::unique_ptr<Eh200_9::solution, CudaDeleter> make_cuda_unique<Eh200_9::solution>(const size_t numElements);

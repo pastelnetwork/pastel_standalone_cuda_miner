@@ -28,6 +28,9 @@ private:
     static_assert((N / (K + 1)) + 1 < 8 * sizeof(eh_index), "Size of eh_index must be sufficient to represent indices.");
 
 public:
+    static inline constexpr uint32_t WN = N;
+    static inline constexpr uint32_t WK = K;
+    
     // the number of indices in one equihash solution (2 ^ K)
     static inline constexpr uint32_t ProofSize = 1 << K; // PROOFSIZE=512
     // The number of hash outputs that can be indexed per each hash operation based on N.
@@ -73,3 +76,5 @@ public:
 constexpr uint32_t MAXSOLUTIONS = 10;
 // the maximum number of solutions that can be found per block in the CUDA kernel
 constexpr uint32_t MAX_SOLUTIONS_PER_BLOCK = 32;
+
+using Eh200_9 = Equihash<200, 9>;

@@ -118,3 +118,5 @@ bool parse_uint256(string& error, uint256& value, const string &sUint256, const 
     } while (false);
     return bRet;
 }
+
+template class base_blob<256>;
