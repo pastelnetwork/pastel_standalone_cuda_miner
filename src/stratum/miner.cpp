@@ -102,10 +102,10 @@ void miner(CStratumClient &client)
 
     using eh_type = Eh200_9;
     auto eh = eh_type();
-    blake2b_state hostInitialState;
-    eh.InitializeState(hostInitialState, sPersString);
+    blake2b_state state;
+    eh.InitializeState(state, sPersString);
     v_uint8 vEquihashInput = client.getEquihashInput();
-    blake2b_update_host(&hostInitialState, vEquihashInput.data(), vEquihashInput.size());
+    blake2b_update_host(&state, vEquihashInput.data(), vEquihashInput.size());
 
     const auto generateNonceFn = [&client](uint32_t nExtraNonce2) -> const uint256
     {
@@ -119,5 +119,5 @@ void miner(CStratumClient &client)
     };
     constexpr uint32_t threadsPerBlock = 256;
 
-    miningLoop<eh_type>(hostInitialState, nExtraNonce2, HexStr(client.getTime()), 1, threadsPerBlock, generateNonceFn, submitSolutionFn);
+    miningLoop<eh_type>(state, nExtraNonce2, HexStr(client.getTime()), 1, threadsPerBlock, generateNonceFn, submitSolutionFn);
 }
