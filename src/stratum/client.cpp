@@ -303,7 +303,7 @@ v_uint8 CStratumClient::getEquihashInput() const noexcept
     return v;
 }
 
-const uint256& CStratumClient::generateNonce(const uint32_t nExtraNonce2) noexcept
+const uint256 CStratumClient::generateNonce(const uint32_t nExtraNonce2) noexcept
 {
     m_blockHeader.nNonce.SetNull();
     m_blockHeader.nNonce.SetUint32(0, m_nExtraNonce1);

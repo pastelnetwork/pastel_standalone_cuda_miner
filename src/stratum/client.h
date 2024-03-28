@@ -19,7 +19,7 @@ public:
     void setAuthInfo(const std::string& sLogin, const std::string& sPassword);
     bool submitSolution(const uint32_t nExtraNonce2, const std::string& sTime, 
         const std::string& sNonce, const std::string &sHexSolution);
-    const uint256& generateNonce(const uint32_t nExtraNonce2) noexcept;
+    const uint256 generateNonce(const uint32_t nExtraNonce2) noexcept;
 
     v_uint8 getEquihashInput() const noexcept;
     uint32_t getExtraNonce1() const noexcept { return m_nExtraNonce1; }
