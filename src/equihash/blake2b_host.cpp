@@ -127,26 +127,39 @@ static void blake2b_compress(blake2b_state *state, const uint8_t *block)
 
 void blake2b_update_host(blake2b_state *state, const void *pin, size_t inlen)
 {
-    const uint8_t *in = (const uint8_t *)pin;
+    const uint8_t *in = static_cast<const uint8_t *>(pin);
 
-    if (state->buflen + inlen > BLAKE2B_BLOCKBYTES)
+    if (inlen == 0)
+        return; // No input, nothing to do
+
+    // If there's already data in the buffer, and the new data fills it
+    size_t left = state->buflen;
+    size_t fill = BLAKE2B_BLOCKBYTES - left;
+    if (inlen > fill)
     {
-        size_t left = state->buflen;
-        size_t fill = BLAKE2B_BLOCKBYTES - left;
-
-        memcpy(state->buf + left, in, fill);
-
+        memcpy(state->buf + left, in, fill); // Fill the buffer
         state->buflen += fill;
-        state->t[0] += BLAKE2B_BLOCKBYTES;
-        state->t[1] += (state->t[0] < BLAKE2B_BLOCKBYTES);
-
-        blake2b_compress(state, state->buf);
-
+        blake2b_compress(state, state->buf); // Compress the full buffer
         in += fill;
         inlen -= fill;
         state->buflen = 0;
+        state->t[0] += BLAKE2B_BLOCKBYTES;
+        if (state->t[0] < BLAKE2B_BLOCKBYTES)
+            state->t[1]++; // Overflow
+
+        // Process remaining input data in BLAKE2B_BLOCKBYTES chunks
+        while (inlen > BLAKE2B_BLOCKBYTES)
+        {
+            blake2b_compress(state, in);
+            in += BLAKE2B_BLOCKBYTES;
+            inlen -= BLAKE2B_BLOCKBYTES;
+            state->t[0] += BLAKE2B_BLOCKBYTES;
+            if (state->t[0] < BLAKE2B_BLOCKBYTES)
+                state->t[1]++; // Overflow
+        }
     }
 
+    // Copy remaining input data into the buffer
     memcpy(state->buf + state->buflen, in, inlen);
     state->buflen += inlen;
 }

@@ -49,10 +49,10 @@ __global__ void cudaKernel_generateInitialHashes(const blake2b_state* state, uin
 
     if (hashIdx < EquihashType::NHashes)
     {
-        const uint32_t blockIdx = hashIdx / EquihashType::IndicesPerHashOutput;
+        const uint32_t blockIndex = hashIdx / EquihashType::IndicesPerHashOutput;
 
         blake2b_state localState = *state;
-        blake2b_update_device(&localState, reinterpret_cast<const uint8_t*>(&blockIdx), sizeof(blockIdx));
+        blake2b_update_device(&localState, reinterpret_cast<const uint8_t*>(&blockIndex), sizeof(blockIndex));
 
         uint8_t hash[EquihashType::HashOutput];  
         blake2b_final_device(&localState, hash, EquihashType::HashOutput);
@@ -83,23 +83,23 @@ void generateInitialHashes(const blake2b_state* devState, uint32_t* devHashes,
  * 
  * \tparam EquihashType A struct providing constants specific to the Equihash configuration.
  * \param hashes Array of hash values.
- * \param indices Array where the indices of hashes will be stored, organized by buckets.
- * \param bucketSizes Array that tracks the number of indices stored in each bucket.
- * \param round The current round number, affecting the hash portion used for bucketing.
+ * \param slotBitmaps
  */
 template <typename EquihashType>
 __global__ void cudaKernel_detectCollisions(uint32_t* hashes, uint32_t* slotBitmaps)
 {
-    const uint32_t hashIdx = threadIdx.x + blockIdx.x * blockDim.x;
-    if (hashIdx < EquihashType::NHashes)
-    {
-        const uint32_t bucketIdx = (hashes[hashIdx * EquihashType::HashWords] >> (32 - EquihashType::CollisionBitLength)) & (EquihashType::NSlots - 1);
-        const uint32_t slotIdx = hashIdx % EquihashType::NSlots;
-        const uint32_t bitmapIdx = slotIdx / 32;
-        const uint32_t bitmapMask = 1U << (slotIdx % 32);
+    const uint32_t gid = threadIdx.x + blockIdx.x * blockDim.x;
+    const uint32_t hashIdx = gid * EquihashType::HashWords;
 
-        atomicOr(&slotBitmaps[bucketIdx * (EquihashType::NSlots / 32) + bitmapIdx], bitmapMask);
-    }
+    if (hashIdx >= EquihashType::NHashes * EquihashType::HashWords)
+        return;
+
+    const uint32_t bucketIdx = (hashes[hashIdx] >> (32 - EquihashType::CollisionBitLength)) & (EquihashType::NSlots - 1);
+    const uint32_t slotIdx = hashIdx % EquihashType::NSlots;
+    const uint32_t bitmapIdx = slotIdx / 32;
+    const uint32_t bitmapMask = 1U << (slotIdx % 32);
+
+    atomicOr(&slotBitmaps[bucketIdx * (EquihashType::NSlots / 32) + bitmapIdx], bitmapMask);
 }
 
 template <typename EquihashType>
@@ -117,25 +117,34 @@ void detectCollisions(uint32_t* devHashes, uint32_t* devSlotBitmaps, const uint3
 template<typename EquihashType>
 __global__ void cudaKernel_xorCollisions(uint32_t* hashes, uint32_t* slotBitmaps, uint32_t* xoredHashes)
 {
-    const uint32_t bucketIdx = blockIdx.x;
-    const uint32_t slotIdx = threadIdx.x;
+    const uint32_t gid = threadIdx.x + blockIdx.x * blockDim.x;
+    const uint32_t hashIdx = gid * EquihashType::HashWords;
 
-    if (slotIdx >= EquihashType::NSlots)
+    if (hashIdx >= EquihashType::NHashes * EquihashType::HashWords)
         return;
 
+    const uint32_t bucketIdx = (hashes[hashIdx] >> (32 - EquihashType::CollisionBitLength)) & (EquihashType::NSlots - 1);
+    const uint32_t slotIdx = hashIdx % EquihashType::NSlots;
     const uint32_t bitmapIdx = slotIdx / 32;
     const uint32_t bitmapMask = 1U << (slotIdx % 32);
 
     if (slotBitmaps[bucketIdx * (EquihashType::NSlots / 32) + bitmapIdx] & bitmapMask)
     {
-        const uint32_t index1 = bucketIdx * EquihashType::NSlots + slotIdx;
-        const uint32_t index2 = bucketIdx * EquihashType::NSlots + ((slotIdx + 1) % EquihashType::NSlots);
-        const uint32_t slotIdx = bucketIdx * (EquihashType::NSlots / 32) + index2 / 32;
+        const uint32_t index1 = hashIdx;
+        uint32_t index2 = index1 ^ (1U << (EquihashType::CollisionBitLength - 1));
 
-        if (slotBitmaps[slotIdx] & (1U << (index2 % 32)))
+        while (index2 < EquihashType::NHashes * EquihashType::HashWords)
         {
-            for (uint32_t i = 0; i < EquihashType::HashWords; ++i)
-                xoredHashes[index1 * EquihashType::HashWords + i] ^= hashes[index2 * EquihashType::HashWords + i];
+            const uint32_t index2BitmapIdx = index2 / 32;
+            const uint32_t index2BitmapMask = 1U << (index2 % 32);
+
+            if (slotBitmaps[bucketIdx * (EquihashType::NSlots / 32) + index2BitmapIdx] & index2BitmapMask)
+            {
+                #pragma unroll
+                for (uint32_t i = 0; i < EquihashType::HashWords; ++i)
+                    xoredHashes[index1 + i] ^= hashes[index2 + i];
+            }
+            index2 += (1U << (EquihashType::CollisionBitLength - 1));
         }
     }
 }
@@ -159,46 +168,70 @@ void xorCollisions(uint32_t* devHashes, uint32_t* devSlotBitmaps, uint32_t* devX
 template<typename EquihashType>
 __global__ void cudaKernel_findSolutions(uint32_t* hashes, uint32_t* slotBitmaps, typename EquihashType::solution* solutions, uint32_t* solutionCount)
 {
-    const uint32_t hashIdx = threadIdx.x + blockIdx.x * blockDim.x;
-    if (hashIdx >= EquihashType::NHashes)
+    const uint32_t gid = threadIdx.x + blockIdx.x * blockDim.x;
+    const uint32_t hashIdx = gid * EquihashType::HashWords;
+
+    if (hashIdx >= EquihashType::NHashes * EquihashType::HashWords)
         return;
-    // Check if the hash meets the difficulty target
-    if (hashes[hashIdx * EquihashType::HashWords] == 0)
+
+    const uint32_t bucketIdx = (hashes[hashIdx] >> (32 - EquihashType::CollisionBitLength)) & (EquihashType::NSlots - 1);
+    const uint32_t slotIdx = hashIdx % EquihashType::NSlots;
+    const uint32_t bitmapIdx = slotIdx / 32;
+    const uint32_t bitmapMask = 1U << (slotIdx % 32);
+
+    if (slotBitmaps[bucketIdx * (EquihashType::NSlots / 32) + bitmapIdx] & bitmapMask)
     {
-        // Calculate the bucket index and slot index
-        const uint32_t bucketIdx = (hashes[hashIdx * EquihashType::HashWords] >> (32 - EquihashType::CollisionBitLength)) & (EquihashType::NSlots - 1);
-        const uint32_t slotIdx = hashIdx % EquihashType::NSlots;
+        uint32_t solutionIndices[EquihashType::ProofSize];
+        uint32_t xoredHash[EquihashType::HashWords] = { 0 };
 
-        // Check if the slot is marked in the slotBitmap
-        const uint32_t bitmapIdx = slotIdx / 32;
-        const uint32_t bitmapMask = 1U << (slotIdx % 32);
-        if (slotBitmaps[bucketIdx * (EquihashType::NSlots / 32) + bitmapIdx] & bitmapMask)
+        // Initialize the solution indices and xoredHash
+        solutionIndices[0] = hashIdx / EquihashType::HashWords;
+        for (uint32_t i = 0; i < EquihashType::HashWords; ++i)
+            xoredHash[i] = hashes[hashIdx + i];
+
+        // Traverse the tree to find a valid solution
+        for (uint32_t depth = 1; depth < EquihashType::ProofSize; ++depth)
         {
-            // Atomically increment the solution count and get the current index
-            const uint32_t solutionIdx = atomicAdd(solutionCount, 1);
+            const uint32_t parentIdx = solutionIndices[depth - 1];
+            const uint32_t parentBucketIdx = (hashes[parentIdx * EquihashType::HashWords] >> (32 - EquihashType::CollisionBitLength)) & (EquihashType::NSlots - 1);
+            const uint32_t parentSlotIdx = parentIdx % EquihashType::NSlots;
 
-            // Store the solution indices
-            uint32_t indiceIdx = 0;
-            uint32_t indiceValue = hashIdx;
-            for (uint32_t i = 0; i < EquihashType::WK; ++i)
+            uint32_t childIdx = parentIdx ^ (1U << (depth - 1));
+            bool childFound = false;
+
+            while (childIdx < EquihashType::NHashes)
             {
-                solutions[solutionIdx].indices[indiceIdx] = indiceValue;
-                ++indiceIdx;
+                const uint32_t childBitmapIdx = childIdx / 32;
+                const uint32_t childBitmapMask = 1U << (childIdx % 32);
 
-                // Calculate the next indice value
-                const uint32_t parentIdx = indiceValue / 2;
-                const uint32_t parentSlotIdx = parentIdx % EquihashType::NSlots;
-                const uint32_t parentBitmapIdx = parentSlotIdx / 32;
-                const uint32_t parentBitmapMask = 1U << (parentSlotIdx % 32);
+                if (slotBitmaps[parentBucketIdx * (EquihashType::NSlots / 32) + childBitmapIdx] & childBitmapMask)
+                {
+                    solutionIndices[depth] = childIdx;
+                    for (uint32_t i = 0; i < EquihashType::HashWords; ++i)
+                        xoredHash[i] ^= hashes[childIdx * EquihashType::HashWords + i];
+                    childFound = true;
+                    break;
+                }
 
-                if (slotBitmaps[bucketIdx * (EquihashType::NSlots / 32) + parentBitmapIdx] & parentBitmapMask)
-                    indiceValue = parentIdx;
-                else
-                    indiceValue = parentIdx + EquihashType::NSlots;
-            }        
+                childIdx += (1U << (depth - 1));
+            }
+
+            if (!childFound)
+                break;
+        }
+
+        // Check if the xoredHash satisfies the difficulty target
+        // TODO: Implement the difficulty check based on the specific target
+
+        // If a valid solution is found, store it
+        if (true/* Difficulty check passed */)
+        {
+            const uint32_t solutionIdx = atomicAdd(solutionCount, 1);
+            for (uint32_t i = 0; i < EquihashType::ProofSize; ++i)
+                solutions[solutionIdx].indices[i] = solutionIndices[i];
         }
     }
- }
+}
 
 template<typename EquihashType>
 uint32_t findSolutions(uint32_t* devHashes, uint32_t* devSlotBitmaps, typename EquihashType::solution* devSolutions, uint32_t* devSolutionCount, 
@@ -213,7 +246,7 @@ uint32_t findSolutions(uint32_t* devHashes, uint32_t* devSlotBitmaps, typename E
     cudaKernel_findSolutions<EquihashType><<<gridDim, blockDim>>>(devHashes, devSlotBitmaps, devSolutions, devSolutionCount);
 
     // Copy the solution count from device to host
-    uint32_t solutionCount;
+    uint32_t solutionCount = 0;
     copyToHost(&solutionCount, devSolutionCount, sizeof(uint32_t));
 
     return solutionCount;

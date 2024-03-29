@@ -138,22 +138,29 @@ __device__ void blake2b_compress_device(blake2b_state *S, const uint8_t *block)
 
 __device__ void blake2b_update_device(blake2b_state *S, const void *pin, size_t inlen)
 {
-    const uint8_t *in = (const uint8_t *)pin;
+    const uint8_t *in = static_cast<const uint8_t *>(pin);
 
-    if (S->buflen + inlen > BLAKE2B_BLOCKBYTES)
+    while (inlen > 0)
     {
-        size_t left = S->buflen;
-        size_t fill = BLAKE2B_BLOCKBYTES - left;
-        memcpy(S->buf + left, in, fill);
-        S->buflen += fill;
-        blake2b_increment_counter(S, BLAKE2B_BLOCKBYTES);
-        blake2b_compress_device(S, S->buf);
-        in += fill;
-        inlen -= fill;
-        S->buflen = 0;
+        size_t space_in_buffer = BLAKE2B_BLOCKBYTES - S->buflen;
+        size_t to_copy = inlen;
+        if (to_copy > space_in_buffer)
+            to_copy = space_in_buffer;
+
+        // Manually copy bytes if necessary. Assuming memcpy is CUDA-compatible here.
+        memcpy(S->buf + S->buflen, in, to_copy);
+        
+        S->buflen += to_copy;
+        in += to_copy;
+        inlen -= to_copy;
+
+        if (S->buflen == BLAKE2B_BLOCKBYTES)
+        {
+            blake2b_increment_counter(S, BLAKE2B_BLOCKBYTES);
+            blake2b_compress_device(S, S->buf);
+            S->buflen = 0; // Reset buffer length after compression
+        }
     }
-    memcpy(S->buf + S->buflen, in, inlen);
-    S->buflen += inlen;
 }
 
 __device__ void blake2b_final_device(blake2b_state *S, void *out, size_t outlen)

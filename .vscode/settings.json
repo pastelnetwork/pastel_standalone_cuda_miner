@@ -144,5 +144,6 @@
     "PATH": "/usr/local/cuda/bin:${env:PATH}",
     "LD_LIBRARY_PATH": "/usr/local/cuda/lib64:${env:LD_LIBRARY_PATH}",
     "CUDACXX": "nvcc",
+    "CMAKE_GENERATOR": "Unix Makefiles",
   },
 }

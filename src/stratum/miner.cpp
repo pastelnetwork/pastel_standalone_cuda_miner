@@ -51,7 +51,7 @@ uint32_t miningLoop(const blake2b_state& initialState, uint32_t &nExtraNonce2, c
     for (uint32_t i = 0; i < nIterations; ++i)
     {
         blake2b_state currState = initialState;
-        const uint256 nonce = genNonceFn(nExtraNonce2);
+        const uint256 nonce = genNonceFn(nExtraNonce2++);
         blake2b_update_host(&currState, nonce.begin(), nonce.size());
 
         // Copy blake2b states from host to the device
@@ -59,7 +59,7 @@ uint32_t miningLoop(const blake2b_state& initialState, uint32_t &nExtraNonce2, c
 
         // Generate initial hash values
         generateInitialHashes<eh_type>(devState.get(), devHashes.get(), threadsPerBlock);
-
+        
         // Perform K rounds of collision detection and XORing
         for (uint32_t round = 0; round < EquihashType::WK; round++)
         {
@@ -77,7 +77,8 @@ uint32_t miningLoop(const blake2b_state& initialState, uint32_t &nExtraNonce2, c
 
         nTotalSolutionCount += nSolutionCount;
 
-        copySolutionsToHost<eh_type>(devSolutions.get(), nSolutionCount, vHostSolutions);
+        if (nSolutionCount > 0)
+            copySolutionsToHost<eh_type>(devSolutions.get(), nSolutionCount, vHostSolutions);
 
         // Process the solutions and submit them
         for (const auto& solution : vHostSolutions)

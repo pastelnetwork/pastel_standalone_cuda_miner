@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.18 FATAL_ERROR)
 
+if (NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
+
 # Set the CUDA architectures
 set(CMAKE_CUDA_ARCHITECTURES 75;86)
 
