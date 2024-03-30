@@ -51,8 +51,8 @@ bool EhDevice<EquihashType>::allocate_memory()
 
         collisionCounters = make_cuda_unique<uint32_t>(EquihashType::NBucketCount * EquihashType::WK);
 
-        // Accumulated collision pair offsets for each round
-        vCollisionPairsOffsets.resize(EquihashType::WK, 0);
+        // Accumulated collision pair offsets for each bucket
+        vCollisionPairsOffsets.resize(EquihashType::NBucketCount, 0);
 
         // Allocate device memory for solutions and solution count
         solutions = make_cuda_unique<typename EquihashType::solution>(MAXSOLUTIONS);
@@ -152,11 +152,6 @@ __global__ void cudaKernel_detectCollisions(
 template <typename EquihashType>
 void EhDevice<EquihashType>::detectCollisions()
 {
-    // Calculate the accumulated collision pair offset for the current round
-    uint32_t collisionPairsOffset = 0;
-    if (round > 0)
-        collisionPairsOffset = vCollisionPairsOffsets[round - 1];
-
     const uint32_t collisionBitLength = EquihashType::CollisionBitLength;
     const uint32_t wordOffset1 = (round * collisionBitLength) / 32;
     const uint32_t wordOffset2 = ((round * collisionBitLength) + (32 - collisionBitLength)) / 32;
@@ -174,23 +169,21 @@ void EhDevice<EquihashType>::detectCollisions()
         const dim3 gridDim((numItems + ThreadsPerBlock - 1) / ThreadsPerBlock);
         const dim3 blockDim(ThreadsPerBlock);
 
+        auto collisionCountersPtr = collisionCounters.get() + bucketIdx * EquihashType::WK + round;
         cudaKernel_detectCollisions<EquihashType><<<gridDim, blockDim>>>(
             hashes.get(), 
             collisionPairs.get() + bucketIdx * MaxCollisionsPerBucket,
-            collisionCounters.get() + bucketIdx * EquihashType::WK + round, 
+            collisionCountersPtr, 
             startIdx, endIdx,
             wordOffset1, wordOffset2, collisionBitMask1, collisionBitMask2);
 
         // Copy the collision count from device to host
-        uint32_t collisionCount;
-        copyToHost(&collisionCount, collisionCounters.get() + bucketIdx * EquihashType::WK + round, sizeof(uint32_t));
+        uint32_t collisionCount = 0;
+        copyToHost(&collisionCount, collisionCountersPtr, sizeof(uint32_t));
 
-        // Update the accumulated collision pair offset for the next bucket
-        collisionPairsOffset += collisionCount;
+        // Store the accumulated collision pair offset for the current round
+        vCollisionPairsOffsets[bucketIdx] += collisionCount;
     }
-
-    // Store the accumulated collision pair offset for the current round
-    vCollisionPairsOffsets[round] = collisionPairsOffset;
 }
 
 template<typename EquihashType>
