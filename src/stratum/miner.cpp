@@ -17,7 +17,7 @@ uint32_t miningLoop(const blake2b_state& initialState, uint32_t &nExtraNonce2, c
                     const size_t nIterations, const uint32_t threadsPerBlock,
                     const funcGenerateNonce_t &genNonceFn, const funcSubmitSolution_t &submitSolutionFn)
 {
-    EhDeviceStore<EquihashType> devStore;
+    EhDevice<EquihashType> devStore;
     if (!devStore.allocate_memory())
     {
         cerr << "Failed to allocate CUDA memory for Equihash solver" << endl;
@@ -30,62 +30,16 @@ uint32_t miningLoop(const blake2b_state& initialState, uint32_t &nExtraNonce2, c
     for (uint32_t i = 0; i < nIterations; ++i)
     {
         blake2b_state currState = initialState;
-        const uint256 nonce = genNonceFn(nExtraNonce2++);
+        const uint256 nonce = genNonceFn(nExtraNonce2);
         blake2b_update_host(&currState, nonce.begin(), nonce.size());
 
         // Copy blake2b states from host to the device
         copyToDevice(devStore.initialState.get(), &currState, sizeof(currState));
 
-        // Generate initial hash values
-        generateInitialHashes<EquihashType>(devStore);
-
-// debug
-v_uint32 hostHashes(EquihashType::NHashes * EquihashType::HashWords);
-copyToHost(hostHashes.data(), devHashes.get(), hostHashes.size() * sizeof(uint32_t));
-
-// Print out the generated hashes
-size_t hashNo = 0;
-for (size_t i = 0; i < hostHashes.size(); i += EquihashType::HashWords)
-{
-    ++hashNo;
-    if (hashNo % 0x1000 != 0)
-        continue;
-    cout << "Hash " << dec << hashNo << ": ";
-    bool bAllZeroes = true;
-    for (size_t j = 0; j < EquihashType::HashWords; ++j)
-    {
-        if (hostHashes[i + j])
-            bAllZeroes = false;
-        cout << hex << hostHashes[i + j] << " ";
-    }
-    if (bAllZeroes)
-    {
-        cout << "All zeroes" << endl;
-        break;
-    }
-    cout << endl;
-}
-// debug
-
-        // Perform K rounds of collision detection and XORing
-        for (uint32_t round = 0; round < EquihashType::WK; round++)
-        {
-            // Detect collisions and XOR the colliding pairs
-            detectCollisions<EquihashType>(devHashes.get(), devSlotBitmaps.get(), threadsPerBlock);
-            xorCollisions<EquihashType>(devHashes.get(), devSlotBitmaps.get(), devXoredHashes.get(), threadsPerBlock);
-
-            // Swap the hash pointers for the next round
-            swap(devHashes, devXoredHashes);
-        }
-
-        // Find valid solutions
-        const uint32_t nSolutionCount = findSolutions<EquihashType>(devHashes.get(), devSlotBitmaps.get(),
-            devSolutions.get(), devSolutionCount.get(), threadsPerBlock);
-
+        const uint32_t nSolutionCount = devStore.solver();
         nTotalSolutionCount += nSolutionCount;
-
         if (nSolutionCount > 0)
-            copySolutionsToHost<EquihashType>(devSolutions.get(), nSolutionCount, vHostSolutions);
+            devStore.copySolutionsToHost(vHostSolutions);
 
         // Process the solutions and submit them
         for (const auto& solution : vHostSolutions)
@@ -93,6 +47,8 @@ for (size_t i = 0; i < hostHashes.size(); i += EquihashType::HashWords)
             string sHexSolution = HexStr(solution.indices, solution.indices + EquihashType::ProofSize);
             submitSolutionFn(nExtraNonce2, sTime, nonce.GetHex(), sHexSolution);
         }
+        
+        ++nExtraNonce2;
     }
 
     return nTotalSolutionCount;

@@ -4,43 +4,47 @@
 #pragma once
 #include <cstdint>
 #include <vector>
+#include <memory>
 
 #include <blake2b.h>
 #include <local_types.h>
+#include <src/cuda/memutils.h>
 
 template<typename EquihashType>
 class EhDevice
 {
 public:
-        EhDevice() noexcept = default;
-        ~EhDevice();
+    EhDevice() noexcept = default;
+    ~EhDevice() {}
 
-        std::unique_ptr<blake2b_state> initialState;
-        std::unique_ptr<uint32_t, CudaDeleter> hashes;
-        std::unique_ptr<uint32_t, CudaDeleter> xoredHashes;
+    std::unique_ptr<blake2b_state, CudaDeleter> initialState;
+    std::unique_ptr<uint32_t, CudaDeleter> hashes;
+    std::unique_ptr<uint32_t, CudaDeleter> xoredHashes;
 
-        std::vector<std::unique_ptr<uint32_t, CudaDeleter>> vCollisionPairs;
-        std::vector<std::vector<std::unique_ptr<uint32_t, CudaDeleter>>> vCollisionCounters;
+    std::unique_ptr<uint32_t*, CudaDeleter> collisionPairs;
+    std::vector<std::unique_ptr<uint32_t, CudaDeleter>> vBucketCollisionPairs;
+    // Accumulated collision pair offsets for each round
+    v_uint32 vCollisionPairsOffsets;
 
-        std::unique_ptr<typename EquihashType::solution, CudaDeleter> solutions;
-        std::unique_ptr<uint32_t, CudaDeleter> solutionCount;
+     std::unique_ptr<uint32_t*, CudaDeleter> collisionCounters;   
+    std::vector<std::vector<std::unique_ptr<uint32_t, CudaDeleter>>> vCollisionCounters;
 
-        uint32_t round = 0;
+    std::unique_ptr<typename EquihashType::solution, CudaDeleter> solutions;
+    std::unique_ptr<uint32_t, CudaDeleter> solutionCount;
 
-        bool allocate_memory();
+    uint32_t round = 0;
 
-        static inline constexpr ThreadsPerBlock = 256;
+    bool allocate_memory();
+    uint32_t solver();
 
-        void generateInitialHashes();
-        void detectCollisions();
-        void xorCollisions();
-        uint32_t findSolutions();
+    static inline constexpr uint32_t ThreadsPerBlock = 256;
+    void copySolutionsToHost(std::vector<typename EquihashType::solution>& vHostSolutions);
 
 private:
-    // Accumulated collision pair offsets for each round
-    v_uint32 m_vCollisionPairsOffsets;
-};
+    void generateInitialHashes();
+    void detectCollisions();
+    void xorCollisions();
+    uint32_t findSolutions();
 
-template<typename EquihashType>
-void copySolutionsToHost(typename EquihashType::solution* devSolutions, const uint32_t nSolutionCount, 
-    std::vector<typename EquihashType::solution>& vHostSolutions);
+    void debugPrintHashes();
+};

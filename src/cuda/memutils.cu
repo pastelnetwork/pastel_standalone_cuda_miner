@@ -56,5 +56,6 @@ unique_ptr<T, CudaDeleter> make_cuda_unique(const size_t numElements)
 }
 
 template std::unique_ptr<uint32_t, CudaDeleter> make_cuda_unique<uint32_t>(const size_t numElements);
+template std::unique_ptr<uint32_t*, CudaDeleter> make_cuda_unique<uint32_t*>(const size_t numElements);
 template std::unique_ptr<blake2b_state, CudaDeleter> make_cuda_unique<blake2b_state>(const size_t numElements);
 template std::unique_ptr<Eh200_9::solution, CudaDeleter> make_cuda_unique<Eh200_9::solution>(const size_t numElements);
