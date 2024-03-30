@@ -26,7 +26,7 @@ public:
     // Accumulated collision pair offsets for each round
     v_uint32 vCollisionPairsOffsets;
 
-     std::unique_ptr<uint32_t*, CudaDeleter> collisionCounters;   
+    std::unique_ptr<uint32_t*, CudaDeleter> collisionCounters;   
     std::vector<std::vector<std::unique_ptr<uint32_t, CudaDeleter>>> vCollisionCounters;
 
     std::unique_ptr<typename EquihashType::solution, CudaDeleter> solutions;
