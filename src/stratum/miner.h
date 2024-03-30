@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <string>
 #include <functional>
+#include <vector>
 
 #include <blake2b.h>
 #include <src/utils/uint256.h>

@@ -7,6 +7,16 @@
 
 using namespace std;
 
+#define CUDA_CHECK(call)                                                   \
+do {                                                                       \
+    cudaError_t err = call;                                                \
+    if (err != cudaSuccess) {                                              \
+        std::cerr << "CUDA error: " << cudaGetErrorString(err) << " in "   \
+                  << __FILE__ << ":" << __LINE__ << std::endl;             \
+        exit(EXIT_FAILURE);                                                \
+    }                                                                      \
+} while (0)
+
 // Allocate device memory
 void allocateDeviceMemory(void** devPtr, size_t size)
 {
@@ -30,11 +40,6 @@ void copyToHost(void* dst, const void* src, const size_t size)
 {
     cudaMemcpy(dst, src, size, cudaMemcpyDeviceToHost);
 }
-
-// Launch CUDA kernel
-//void launchKernel(void (*kernel)(/* params */), dim3 gridDim, dim3 blockDim /* params */) {
-//    kernel<<<gridDim, blockDim>>>(/* params */);
-//}
 
 void CudaDeleter::operator()(void* ptr) const
 {

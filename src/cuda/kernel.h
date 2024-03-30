@@ -8,18 +8,38 @@
 #include <blake2b.h>
 #include <local_types.h>
 
-template <typename EquihashType>
-void generateInitialHashes(const blake2b_state* devState, uint32_t* devHashes, const uint32_t threadsPerBlock);
-
-template <typename EquihashType>
-void detectCollisions(uint32_t* devHashes, uint32_t* devSlotBitmaps, const uint32_t threadsPerBlock);
-
 template<typename EquihashType>
-void xorCollisions(uint32_t* devHashes, uint32_t* devSlotBitmaps, uint32_t* devXoredHashes, const uint32_t threadsPerBlock);
+class EhDevice
+{
+public:
+        EhDevice() noexcept = default;
+        ~EhDevice();
 
-template<typename EquihashType>
-uint32_t findSolutions(uint32_t* devHashes, uint32_t* devSlotBitmaps, typename EquihashType::solution* devSolutions,
-    uint32_t* devSolutionCount, const uint32_t threadsPerBlock);
+        std::unique_ptr<blake2b_state> initialState;
+        std::unique_ptr<uint32_t, CudaDeleter> hashes;
+        std::unique_ptr<uint32_t, CudaDeleter> xoredHashes;
+
+        std::vector<std::unique_ptr<uint32_t, CudaDeleter>> vCollisionPairs;
+        std::vector<std::vector<std::unique_ptr<uint32_t, CudaDeleter>>> vCollisionCounters;
+
+        std::unique_ptr<typename EquihashType::solution, CudaDeleter> solutions;
+        std::unique_ptr<uint32_t, CudaDeleter> solutionCount;
+
+        uint32_t round = 0;
+
+        bool allocate_memory();
+
+        static inline constexpr ThreadsPerBlock = 256;
+
+        void generateInitialHashes();
+        void detectCollisions();
+        void xorCollisions();
+        uint32_t findSolutions();
+
+private:
+    // Accumulated collision pair offsets for each round
+    v_uint32 m_vCollisionPairsOffsets;
+};
 
 template<typename EquihashType>
 void copySolutionsToHost(typename EquihashType::solution* devSolutions, const uint32_t nSolutionCount, 

@@ -12,40 +12,19 @@
 
 using namespace std;
 
-// Function to submit a solution to the pool
-void submitSolution(int sockfd, const char* jobId, const char* workerName, const char* solution)
-{
-    // Construct the mining.submit message
-    string submitMsg = "{\"id\": 1, \"method\": \"mining.submit\", \"params\": [\"" +
-                            string(workerName) + "\", \"" + string(jobId) + "\", \"" +
-                            string(solution) + "\"]}\n";
-
-    // Send the message to the pool
-    if (send(sockfd, submitMsg.c_str(), submitMsg.length(), 0) < 0) {
-        cerr << "Error sending solution to pool" << endl;
-    }
-}
-
 template<typename EquihashType>
 uint32_t miningLoop(const blake2b_state& initialState, uint32_t &nExtraNonce2, const string &sTime,
                     const size_t nIterations, const uint32_t threadsPerBlock,
                     const funcGenerateNonce_t &genNonceFn, const funcSubmitSolution_t &submitSolutionFn)
 {
-    using eh_type = EquihashType;
+    EhDeviceStore<EquihashType> devStore;
+    if (!devStore.allocate_memory())
+    {
+        cerr << "Failed to allocate CUDA memory for Equihash solver" << endl;
+        return 0;
+    }    
 
-    // Allocate device memory for blake2b state
-    auto devState = make_cuda_unique<blake2b_state>(1);
-    // Allocate device memory for hash values
-    auto devHashes = make_cuda_unique<uint32_t>(eh_type::NHashes * eh_type::HashWords);
-    // Allocate device memory for XORed hash values
-    auto devXoredHashes = make_cuda_unique<uint32_t>(eh_type::NSlots * eh_type::HashWords);
-    // Allocate device memory for slot bitmaps
-    auto devSlotBitmaps = make_cuda_unique<uint32_t>(eh_type::NSlots * (eh_type::NSlots / 32));
-    // Allocate device memory for solutions and solution count
-    auto devSolutions = make_cuda_unique<typename eh_type::solution>(MAXSOLUTIONS);
-    auto devSolutionCount = make_cuda_unique<uint32_t>(1);
-
-    vector<typename eh_type::solution> vHostSolutions;
+    vector<typename EquihashType::solution> vHostSolutions;
     uint32_t nTotalSolutionCount = 0;
 
     for (uint32_t i = 0; i < nIterations; ++i)
@@ -55,35 +34,63 @@ uint32_t miningLoop(const blake2b_state& initialState, uint32_t &nExtraNonce2, c
         blake2b_update_host(&currState, nonce.begin(), nonce.size());
 
         // Copy blake2b states from host to the device
-        copyToDevice(devState.get(), &currState, sizeof(currState));
+        copyToDevice(devStore.initialState.get(), &currState, sizeof(currState));
 
         // Generate initial hash values
-        generateInitialHashes<eh_type>(devState.get(), devHashes.get(), threadsPerBlock);
-        
+        generateInitialHashes<EquihashType>(devStore);
+
+// debug
+v_uint32 hostHashes(EquihashType::NHashes * EquihashType::HashWords);
+copyToHost(hostHashes.data(), devHashes.get(), hostHashes.size() * sizeof(uint32_t));
+
+// Print out the generated hashes
+size_t hashNo = 0;
+for (size_t i = 0; i < hostHashes.size(); i += EquihashType::HashWords)
+{
+    ++hashNo;
+    if (hashNo % 0x1000 != 0)
+        continue;
+    cout << "Hash " << dec << hashNo << ": ";
+    bool bAllZeroes = true;
+    for (size_t j = 0; j < EquihashType::HashWords; ++j)
+    {
+        if (hostHashes[i + j])
+            bAllZeroes = false;
+        cout << hex << hostHashes[i + j] << " ";
+    }
+    if (bAllZeroes)
+    {
+        cout << "All zeroes" << endl;
+        break;
+    }
+    cout << endl;
+}
+// debug
+
         // Perform K rounds of collision detection and XORing
         for (uint32_t round = 0; round < EquihashType::WK; round++)
         {
             // Detect collisions and XOR the colliding pairs
-            detectCollisions<eh_type>(devHashes.get(), devSlotBitmaps.get(), threadsPerBlock);
-            xorCollisions<eh_type>(devHashes.get(), devSlotBitmaps.get(), devXoredHashes.get(), threadsPerBlock);
+            detectCollisions<EquihashType>(devHashes.get(), devSlotBitmaps.get(), threadsPerBlock);
+            xorCollisions<EquihashType>(devHashes.get(), devSlotBitmaps.get(), devXoredHashes.get(), threadsPerBlock);
 
             // Swap the hash pointers for the next round
             swap(devHashes, devXoredHashes);
         }
 
         // Find valid solutions
-        const uint32_t nSolutionCount = findSolutions<eh_type>(devHashes.get(), devSlotBitmaps.get(),
+        const uint32_t nSolutionCount = findSolutions<EquihashType>(devHashes.get(), devSlotBitmaps.get(),
             devSolutions.get(), devSolutionCount.get(), threadsPerBlock);
 
         nTotalSolutionCount += nSolutionCount;
 
         if (nSolutionCount > 0)
-            copySolutionsToHost<eh_type>(devSolutions.get(), nSolutionCount, vHostSolutions);
+            copySolutionsToHost<EquihashType>(devSolutions.get(), nSolutionCount, vHostSolutions);
 
         // Process the solutions and submit them
         for (const auto& solution : vHostSolutions)
         {
-            string sHexSolution = HexStr(solution.indices, solution.indices + eh_type::ProofSize);
+            string sHexSolution = HexStr(solution.indices, solution.indices + EquihashType::ProofSize);
             submitSolutionFn(nExtraNonce2, sTime, nonce.GetHex(), sHexSolution);
         }
     }

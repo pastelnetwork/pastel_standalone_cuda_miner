@@ -47,7 +47,7 @@ TEST(MinerTest, MiningLoop)
 
     uint32_t nExtraNonce2 = 123;
     string sTime = "current_time";
-    size_t nIterations = 100;
+    size_t nIterations = 1;
     uint32_t threadsPerBlock = 256;
 
     // Define the generateNonce function

@@ -38,7 +38,7 @@ public:
     static inline constexpr uint32_t ProofSize = 1 << K; // PROOFSIZE=512
     // The number of hash outputs that can be indexed per each hash operation based on N.
      static inline constexpr uint32_t IndicesPerHashOutput = 512 / N;  // HASHESPERBLAKE=2
-    // The output size of the blake2b hash in bytes
+    // The output size of the hash in bytes
     static inline constexpr uint32_t HashOutput = IndicesPerHashOutput * N / 8; // HASHOUT=50
     // The number of 32-bit words needed to store the hash output
     static inline constexpr uint32_t HashWords = (HashOutput + sizeof(uint32_t) - 1) / sizeof(uint32_t); // HASHWORDS=13
@@ -60,13 +60,19 @@ public:
     static inline constexpr uint32_t SolutionWidth = ProofSize * (CollisionBitLength + 1) / 8;
 
     // the base value used in the equihash algorithm
-    static inline constexpr uint32_t Base = 1 << CollisionBitLength;
+    static inline constexpr uint32_t Base = 1 << CollisionBitLength; // 1'048'576
     // the total number of hashes required for the equihash algorithm
-    static inline constexpr uint32_t NHashes = 2 * Base;
+    static inline constexpr uint32_t NHashes = 2 * Base; // 2'097'152
+    // the total number of hashes words required for the equihash algorithm
+    static inline constexpr uint32_t NHashWords = NHashes * HashWords;
     // the number of slots in the equihash algorithm
-    static inline constexpr uint32_t NSlots = Base;
+    static inline constexpr uint32_t NSlots = Base; // 1'048'576
+    // the number of 32-bit slot bitmaps
+    static inline constexpr uint32_t NSlotBitmaps = NSlots / 32;
     // the number of blocks required to generate the hashes
     static inline constexpr uint32_t NBlocks = (NHashes + IndicesPerHashOutput - 1) / IndicesPerHashOutput;
+    static inline constexpr uint32_t NBucketSize = UINT16_MAX; // 65'535
+    static inline constexpr uint32_t NBucketCount = (NHashes + NBucketSize - 1) / NBucketSize; // 33
 
     typedef struct _solution 
     {
