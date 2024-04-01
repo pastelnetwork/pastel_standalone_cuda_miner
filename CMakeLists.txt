@@ -5,7 +5,7 @@ if (NOT CMAKE_BUILD_TYPE)
 endif()
 
 # Set the CUDA architectures
-set(CMAKE_CUDA_ARCHITECTURES 75;86)
+set(CMAKE_CUDA_ARCHITECTURES 61;75;86)
 
 project(pastel_miner VERSION 1.0 LANGUAGES CXX CUDA)
 project(pastel_miner_gtest VERSION 1.0 LANGUAGES CXX CUDA)

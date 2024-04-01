@@ -1,6 +1,8 @@
 // Copyright (c) 2024 The Pastel developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://www.opensource.org/licenses/mit-license.php.
+#include <iostream>
+
 #include <src/cuda/memutils.h>
 #include <src/equihash/equihash.h>
 #include <blake2b.h>
@@ -20,25 +22,25 @@ do {                                                                       \
 // Allocate device memory
 void allocateDeviceMemory(void** devPtr, size_t size)
 {
-    cudaMalloc(devPtr, size);
+    CUDA_CHECK(cudaMalloc(devPtr, size));
 }
 
 // Free device memory
 void freeDeviceMemory(void* devPtr)
 {
-    cudaFree(devPtr);
+    CUDA_CHECK(cudaFree(devPtr));
 }
 
 // Copy data from host to device
 void copyToDevice(void* dst, const void* src, const size_t size)
 {
-    cudaMemcpy(dst, src, size, cudaMemcpyHostToDevice);
+    CUDA_CHECK(cudaMemcpy(dst, src, size, cudaMemcpyHostToDevice));
 }
 
 // Copy data from device to host
 void copyToHost(void* dst, const void* src, const size_t size)
 {
-    cudaMemcpy(dst, src, size, cudaMemcpyDeviceToHost);
+    CUDA_CHECK(cudaMemcpy(dst, src, size, cudaMemcpyDeviceToHost));
 }
 
 void CudaDeleter::operator()(void* ptr) const
@@ -51,7 +53,7 @@ template <typename T>
 unique_ptr<T, CudaDeleter> make_cuda_unique(const size_t numElements)
 {
     T* ptr = nullptr;
-    cudaMalloc(&ptr, numElements * sizeof(T));
+    CUDA_CHECK(cudaMalloc(&ptr, numElements * sizeof(T)));
     return unique_ptr<T, CudaDeleter>(ptr);
 }
 

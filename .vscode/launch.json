@@ -2,6 +2,20 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "CUDA GDB Server: Launch",
+      "type": "cuda-gdbserver",
+      "request": "launch",
+      "server": "cuda-gdbserver",
+      "program": "",
+      "target": {
+        "host": "localhost",
+        "port": "12345"
+      },
+      "sysroot": "",
+      "debuggerPath": ""
+    },
+    
+    {
       "name": "C/C++ Runner: Pastel-Miner Debug Session",
       "type": "cppdbg",
       "request": "launch",
@@ -21,6 +35,16 @@
           "ignoreFailures": true
         }
       ]
+    },
+    {
+      "name": "C/C++ Runner: Pastel-Miner CUDA GTest Debug Session",
+      "type": "cuda-gdb",
+      "request": "launch",
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "program": "${workspaceFolder}/build/pastel_miner_gtest",
+      "environment": [],
+      "preLaunchTask": "Build CUDA project: cmake build",
     },
     {
       "name": "C/C++ Runner: Pastel-Miner GTest Debug Session",

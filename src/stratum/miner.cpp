@@ -37,6 +37,7 @@ uint32_t miningLoop(const blake2b_state& initialState, uint32_t &nExtraNonce2, c
         copyToDevice(devStore.initialState.get(), &currState, sizeof(currState));
 
         const uint32_t nSolutionCount = devStore.solver();
+        
         nTotalSolutionCount += nSolutionCount;
         if (nSolutionCount > 0)
             devStore.copySolutionsToHost(vHostSolutions);

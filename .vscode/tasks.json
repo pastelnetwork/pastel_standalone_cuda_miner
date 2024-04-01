@@ -2,9 +2,16 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "Create Project Build Directory",
+            "type": "shell",
+            "command": "mkdir -p ${workspaceFolder}/build",
+            "problemMatcher": []
+        },
+       {
             "label": "Build CUDA project: cmake build",
             "type": "cmake",
             "command": "build",
+            "dependsOn": "Create Project Build Directory",
             "group": {
                 "kind": "build",
                 "isDefault": true
