@@ -70,10 +70,10 @@ public:
     static inline constexpr uint32_t NSlots = Base; // 1'048'576
     // the number of 32-bit slot bitmaps
     static inline constexpr uint32_t NSlotBitmaps = NSlots / 32;
-    // the number of blocks required to generate the hashes
-    static inline constexpr uint32_t NBlocks = (NHashes + IndicesPerHashOutput - 1) / IndicesPerHashOutput;
     static inline constexpr uint32_t NBucketSize = UINT16_MAX; // 65'535
     static inline constexpr uint32_t NBucketCount = (NHashes + NBucketSize - 1) / NBucketSize; // 33
+    static inline constexpr uint32_t NHashStorageCount = NBucketCount * NBucketSize; // 2'147'680
+    static inline constexpr uint32_t NHashStorageWords = NHashStorageCount * HashWords; // 150'236'160
 
     typedef struct _solution 
     {

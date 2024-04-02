@@ -20,6 +20,7 @@ public:
     std::unique_ptr<blake2b_state, CudaDeleter> initialState;
     std::unique_ptr<uint32_t, CudaDeleter> hashes;
     std::unique_ptr<uint32_t, CudaDeleter> xoredHashes;
+    std::unique_ptr<uint32_t, CudaDeleter> bucketHashIndices;
 
     std::unique_ptr<uint32_t, CudaDeleter> collisionPairs;
     // Accumulated collision pair offsets for each bucket
@@ -42,11 +43,12 @@ public:
     static inline constexpr uint32_t MaxCollisionsPerBucket = 50'000;
 
 private:
+    void putHashesIntoBuckets();
     void generateInitialHashes();
     void processCollisions();
     uint32_t findSolutions();
 
-    void debugPrintHashes();
+    void debugPrintHashes(const bool bIsBucketed);
     void debugPrintXoredHashes();
     void debugPrintCollisionPairs();
 };
