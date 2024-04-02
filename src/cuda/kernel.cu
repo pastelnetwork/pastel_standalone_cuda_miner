@@ -200,6 +200,9 @@ void EhDevice<EquihashType>::processCollisions()
         const uint32_t startIdx = bucketIdx * EquihashType::NBucketSize;
         const uint32_t endIdx = min(startIdx + vCollisionCounters[bucketIdx], EquihashType::NHashes);
         const uint32_t numItems = endIdx - startIdx;
+        
+        if (numItems == 0)
+            continue;
 
         const dim3 gridDim((numItems + ThreadsPerBlock - 1) / ThreadsPerBlock);
         const dim3 blockDim(ThreadsPerBlock);
@@ -207,7 +210,7 @@ void EhDevice<EquihashType>::processCollisions()
         try
         {
             auto collisionPairsPtr = collisionPairs.get() + bucketIdx * MaxCollisionsPerBucket + vCollisionPairsOffsets[bucketIdx];
-            auto collisionCountersPtr = collisionCounters.get() + (round == 0 ? 0 : EquihashType::NBucketCount * (round - 1)) + bucketIdx;
+            auto collisionCountersPtr = collisionCounters.get() + (round == 0 ? 0 : EquihashType::NBucketCount * round) + bucketIdx;
             cudaKernel_processCollisions<EquihashType><<<gridDim, blockDim>>>(
                 hashes.get(), xoredHashes.get(),
                 collisionPairsPtr, collisionCountersPtr,
@@ -239,7 +242,7 @@ void EhDevice<EquihashType>::processCollisions()
         } 
         catch (const exception& e)
         {
-            cerr << "Exception in detectCollisions: " << e.what() << endl;
+            cerr << "Exception in processCollisions: " << e.what() << endl;
         }
     }
 }
@@ -401,13 +404,15 @@ void EhDevice<EquihashType>::debugPrintXoredHashes()
 {
     v_uint32 hostHashes;
     v_uint32 vBucketCollisionCounts(EquihashType::NBucketCount);
-    copyToHost(vBucketCollisionCounts.data(), collisionCounters.get() + (round == 0 ? 0 : (round - 1) * EquihashType::NBucketCount),
+    copyToHost(vBucketCollisionCounts.data(), collisionCounters.get() + (round == 0 ? 0 : EquihashType::NBucketCount * round),
         vBucketCollisionCounts.size() * sizeof(uint32_t));
 
     cout << endl << "Xored hashes for round #" << round << ":" << endl;
     for (uint32_t bucketIdx = 0; bucketIdx < EquihashType::NBucketCount; ++bucketIdx)
     {
         size_t nBucketCollisionCount = vBucketCollisionCounts[bucketIdx];
+        if (nBucketCollisionCount == 0)
+            continue;
         cout << "Bucket #" << dec << bucketIdx << " (" << 
             nBucketCollisionCount << ") xored hashes: " << endl;
 
@@ -419,8 +424,8 @@ void EhDevice<EquihashType>::debugPrintXoredHashes()
         for (uint32_t i = 0; i < nBucketCollisionCount; ++i)
         {
             ++hashNo;
-            // if (hashNo % 1024 != 0)
-            //     continue;
+            if (hashNo % 100 != 0)
+                 continue;
             cout << "Hash " << dec << hashNo << ": " << hex << setfill('0') ;
             bool bAllZeroes = true;
             for (size_t j = 0; j < EquihashType::HashWords; ++j)
@@ -449,8 +454,10 @@ template<typename EquihashType>
 void EhDevice<EquihashType>::debugPrintCollisionPairs()
 {
     v_uint32 vBucketCollisionCounts(EquihashType::NBucketCount);
-    copyToHost(vBucketCollisionCounts.data(), collisionCounters.get() + (round == 0 ? 0 : (round - 1) * EquihashType::NBucketCount), vBucketCollisionCounts.size() * sizeof(uint32_t));
+    copyToHost(vBucketCollisionCounts.data(), collisionCounters.get() + 
+        (round == 0 ? 0 : EquihashType::NBucketCount * round), vBucketCollisionCounts.size() * sizeof(uint32_t));
 
+    constexpr uint32_t COLLISIONS_PER_LINE = 10;
     cout << endl << "Collision pairs for round #" << round << ":" << endl;
     for (uint32_t bucketIdx = 0; bucketIdx < EquihashType::NBucketCount; ++bucketIdx)
     {
@@ -458,19 +465,21 @@ void EhDevice<EquihashType>::debugPrintCollisionPairs()
         cout << "Bucket #" << dec << bucketIdx << " (" << nBucketCollisionCount << ") collision pairs: " << endl;
 
         v_uint32 hostCollisionPairs(nBucketCollisionCount);
-        copyToHost(hostCollisionPairs.data(), collisionPairs.get() + bucketIdx * MaxCollisionsPerBucket + (round == 0 ? 0 : vCollisionPairsOffsets[round - 1]), nBucketCollisionCount * sizeof(uint32_t));
+        copyToHost(hostCollisionPairs.data(), collisionPairs.get() + bucketIdx * MaxCollisionsPerBucket + (round == 0 ? 0 : vCollisionPairsOffsets[round]), nBucketCollisionCount * sizeof(uint32_t));
 
         for (uint32_t i = 0; i < nBucketCollisionCount; ++i)
         {
             uint32_t collisionPair = hostCollisionPairs[i];
             uint32_t idx1 = collisionPair >> 16;
             uint32_t idx2 = collisionPair & 0xFFFF;
-            cout << "Collision pair " << i << ": (" << idx1 << ", " << idx2 << ")" << endl;
-
-            if (i > 0 && (i + 1) % 10 == 0) // Print a newline after every 10 collision pairs
-                cout << endl;
+            if (i % COLLISIONS_PER_LINE == 0)
+            {
+                if (i > 0)
+                    cout << endl;
+                cout << "Pair " << dec << i << ":";
+            }
+            cout << " (" << idx1 << "," << idx2 << ")";
         }
-
         cout << endl;
     }
 }
