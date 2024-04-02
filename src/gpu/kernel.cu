@@ -7,7 +7,6 @@
 #include <string>
 #include <bitset>
 #include <iostream>
-#include <limits>
 
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
@@ -41,25 +40,23 @@ bool EhDevice<EquihashType>::allocate_memory()
     try
     {
         // Allocate device memory for blake2b state
-        initialState = make_cuda_unique<blake2b_state>(1);
+        initialState = make_gpu_unique<blake2b_state>(1);
         // Allocate device memory for initial hash values
-        hashes = make_cuda_unique<uint32_t>(EquihashType::NHashWords);
+        hashes = make_gpu_unique<uint32_t>(EquihashType::NHashWords);
         // Allocate device memory for XORed hash values
-        xoredHashes = make_cuda_unique<uint32_t>(EquihashType::NHashWords);
+        xoredHashes = make_gpu_unique<uint32_t>(EquihashType::NHashWords);
 
         // Allocate device buffer for collision pair pointers
-        collisionPairs = make_cuda_unique<uint32_t>(EquihashType::NBucketCount * MaxCollisionsPerBucket);
+        collisionPairs = make_gpu_unique<uint32_t>(EquihashType::NBucketCount * MaxCollisionsPerBucket);
 
-        collisionCounters = make_cuda_unique<uint32_t>(EquihashType::NBucketCount * (EquihashType::WK + 1));
+        collisionCounters = make_gpu_unique<uint32_t>(EquihashType::NBucketCount * EquihashType::WK);
 
         // Accumulated collision pair offsets for each bucket
         vCollisionPairsOffsets.resize(EquihashType::NBucketCount, 0);
-        vPrevCollisionPairsOffsets.resize(EquihashType::NBucketCount, 0);
-        collisionPairOffsets = make_cuda_unique<uint32_t>(EquihashType::NBucketCount);
 
         // Allocate device memory for solutions and solution count
-        solutions = make_cuda_unique<typename EquihashType::solution>(MAXSOLUTIONS);
-        solutionCount = make_cuda_unique<uint32_t>(1);
+        solutions = make_gpu_unique<typename EquihashType::solution>(MAXSOLUTIONS);
+        solutionCount = make_gpu_unique<uint32_t>(1);
 
         return true;
     }
@@ -111,15 +108,14 @@ void EhDevice<EquihashType>::generateInitialHashes()
     dim3 blockDim(ThreadsPerBlock);
 
     cudaKernel_generateInitialHashes<EquihashType><<<gridDim, blockDim>>>(initialState.get(), hashes.get());
-    cudaDeviceSynchronize();
 }
 
 template <typename EquihashType>
-__global__ void cudaKernel_processCollisions(
-    const uint32_t* hashes, uint32_t* xoredHashes,
-    uint32_t* collisionPairs, uint32_t* collisionCounts,
-    const uint32_t startIdx, const uint32_t endIdx, const uint32_t prevTotalCollisionPairs,
-    const uint32_t wordOffset, const uint64_t collisionBitMask)
+__global__ void cudaKernel_detectCollisions(
+    const uint32_t* hashes, uint32_t* collisionPairs, uint32_t* collisionCounts,
+    const uint32_t startIdx, const uint32_t endIdx, 
+    const uint32_t wordOffset1, const uint32_t wordOffset2,
+    const uint32_t collisionBitMask1, const uint32_t collisionBitMask2)
 {
     const uint32_t tid = threadIdx.x + blockIdx.x * blockDim.x;
     const uint32_t idx = startIdx + tid;
@@ -127,47 +123,42 @@ __global__ void cudaKernel_processCollisions(
     if (idx >= endIdx)
         return;
 
-    const uint32_t hashBaseIdx = idx * EquihashType::HashWords;
-    const uint32_t hashWordIdx = hashBaseIdx + wordOffset;
-    const uint64_t maskedHash = 
-        ((static_cast<uint64_t>(hashes[hashWordIdx]) << 32) | 
-                                hashes[hashWordIdx + 1]) & collisionBitMask;
+    const uint32_t collisionBitLength = EquihashType::CollisionBitLength;
+    const uint32_t hash1 = hashes[idx * EquihashType::HashWords + wordOffset1];
+    const uint32_t hash2 = hashes[idx * EquihashType::HashWords + wordOffset2];
+    const uint32_t maskedHash =
+        ((hash1 & collisionBitMask1) << (32 - collisionBitLength)) | 
+        ((hash2 & collisionBitMask2) >> (collisionBitLength - (32 - collisionBitLength)));
 
     const uint32_t bucketIdx = idx / EquihashType::NBucketSize;
     const uint32_t bucketOffset = bucketIdx * EquihashType::NBucketSize;
 
     for (uint32_t i = bucketOffset; i < idx; ++i)
     {
-        const uint32_t otherHashBaseIdx = i * EquihashType::HashWords;
-        const uint32_t otherHashWordIdx = otherHashBaseIdx + wordOffset;
-        const uint64_t otherMaskedHash = 
-            ((static_cast<uint64_t>(hashes[otherHashWordIdx]) << 32) | 
-                                    hashes[otherHashWordIdx + 1]) & collisionBitMask;
+        const uint32_t otherHash1 = hashes[i * EquihashType::HashWords + wordOffset1];
+        const uint32_t otherHash2 = hashes[i * EquihashType::HashWords + wordOffset2];
+        const uint32_t otherMaskedHash = 
+            ((otherHash1 & collisionBitMask1) << (32 - collisionBitLength)) | 
+            ((otherHash2 & collisionBitMask2) >> (collisionBitLength - (32 - collisionBitLength)));
 
         if (maskedHash == otherMaskedHash)
         {
-            const uint32_t collisionIdx = prevTotalCollisionPairs + atomicAdd(collisionCounts, 1);
+            const uint32_t collisionIdx = atomicAdd(collisionCounts, 1);
             collisionPairs[collisionIdx] = (idx << 16) | i;
-
-            const uint32_t xoredHashBaseIdx = bucketOffset + collisionIdx * EquihashType::HashWords;
-            // hash collision found - xor the hashes and store the result
-            for (uint32_t j = 0; j < EquihashType::HashWords; ++j)
-                xoredHashes[xoredHashBaseIdx + j] = hashes[hashBaseIdx + j] ^ hashes[otherHashBaseIdx + j];
         }
     }    
 }
 
 template <typename EquihashType>
-void EhDevice<EquihashType>::processCollisions()
+void EhDevice<EquihashType>::detectCollisions()
 {
     const uint32_t collisionBitLength = EquihashType::CollisionBitLength;
-
-    const uint32_t globalBitOffset = round * collisionBitLength;
-    uint32_t wordOffset = globalBitOffset / numeric_limits<uint32_t>::digits;
-    if (wordOffset >= EquihashType::HashWords - 1)
-        wordOffset = EquihashType::HashWords - 2;
-    const uint32_t bitOffset = numeric_limits<uint32_t>::digits - collisionBitLength - (globalBitOffset % numeric_limits<uint32_t>::digits);
-    const uint64_t collisionBitMask = ((1ULL << collisionBitLength) - 1) << bitOffset;
+    const uint32_t wordOffset1 = (round * collisionBitLength) / 32;
+    const uint32_t wordOffset2 = ((round * collisionBitLength) + (32 - collisionBitLength)) / 32;
+    const uint32_t bitOffset1 = (round * collisionBitLength) % 32;
+    const uint32_t bitOffset2 = ((round * collisionBitLength) + (32 - collisionBitLength)) % 32;
+    const uint32_t collisionBitMask1 = ((1U << (32 - bitOffset1)) - 1) << bitOffset1;
+    const uint32_t collisionBitMask2 = ((1U << bitOffset2) - 1);
 
     for (uint32_t bucketIdx = 0; bucketIdx < EquihashType::NBucketCount; ++bucketIdx)
     {
@@ -175,45 +166,78 @@ void EhDevice<EquihashType>::processCollisions()
         const uint32_t endIdx = min(startIdx + EquihashType::NBucketSize, EquihashType::NHashes);
         const uint32_t numItems = endIdx - startIdx;
 
-        const dim3 gridDim((numItems + ThreadsPerBlock - 1) / ThreadsPerBlock, EquihashType::NBucketCount);
+        const dim3 gridDim((numItems + ThreadsPerBlock - 1) / ThreadsPerBlock);
         const dim3 blockDim(ThreadsPerBlock);
 
-        try
-        {
-            auto collisionPairsPtr = collisionPairs.get() + bucketIdx * MaxCollisionsPerBucket + vCollisionPairsOffsets[bucketIdx];
-            auto collisionCountersPtr = collisionCounters.get() + bucketIdx * EquihashType::WK + round;
-            cudaKernel_processCollisions<EquihashType><<<gridDim, blockDim>>>(
-                hashes.get(), xoredHashes.get(),
-                collisionPairsPtr, collisionCountersPtr,
-                startIdx, endIdx, vPrevCollisionPairsOffsets[bucketIdx],
-                wordOffset, collisionBitMask);
+        auto collisionCountersPtr = collisionCounters.get() + bucketIdx * EquihashType::WK + round;
+        cudaKernel_detectCollisions<EquihashType><<<gridDim, blockDim>>>(
+            hashes.get(), 
+            collisionPairs.get() + bucketIdx * MaxCollisionsPerBucket,
+            collisionCountersPtr, 
+            startIdx, endIdx,
+            wordOffset1, wordOffset2, collisionBitMask1, collisionBitMask2);
 
-            // Check for any CUDA errors
-            cudaError_t cudaError = cudaGetLastError();
-            if (cudaError != cudaSuccess)
-            {
-                cerr << "CUDA error: " << cudaGetErrorString(cudaError) << endl;
-                throw runtime_error("CUDA kernel launch failed");
-            }
-            cudaDeviceSynchronize();
-                
-            // Copy the collision count from device to host
-            uint32_t collisionCount = 0;
-            copyToHost(&collisionCount, collisionCountersPtr, sizeof(uint32_t));
+        // Copy the collision count from device to host
+        uint32_t collisionCount = 0;
+        copyToHost(&collisionCount, collisionCountersPtr, sizeof(uint32_t));
 
-            // Store the accumulated collision pair offset for the current round
-            vCollisionPairsOffsets[bucketIdx] += collisionCount;
-
-            cout << "Round #" << dec << round << 
-                    " Bucket #" << dec << bucketIdx << 
-                    " Collisions: " << dec << collisionCount << 
-                    " Total collisions: " << dec << vCollisionPairsOffsets[bucketIdx] << endl;
-        } 
-        catch (const exception& e)
-        {
-            cerr << "Exception in detectCollisions: " << e.what() << endl;
-        }
+        // Store the accumulated collision pair offset for the current round
+        vCollisionPairsOffsets[bucketIdx] += collisionCount;
     }
+}
+
+template<typename EquihashType>
+__global__ void cudaKernel_xorCollisions(
+    const uint32_t* hashes, uint32_t* xoredHashes,
+    const uint32_t* collisionPairs,
+    const uint32_t* collisionCounts,
+    const uint32_t collisionPairsOffset, 
+    const uint32_t totalCollisionPairs,
+    const uint32_t maxCollisionsPerBucket)
+{
+    const uint32_t tid = threadIdx.x + blockIdx.x * blockDim.x;
+
+    if (tid >= totalCollisionPairs)
+        return;
+
+    uint32_t collisionPairIdx = tid;
+    uint32_t bucketIdx = 0;
+
+    while (collisionPairIdx >= collisionCounts[bucketIdx] && bucketIdx < EquihashType::NBucketCount)
+    {
+        collisionPairIdx -= collisionCounts[bucketIdx];
+        ++bucketIdx;
+    }
+
+    const uint32_t collisionPair = collisionPairs[bucketIdx * maxCollisionsPerBucket + collisionPairsOffset + collisionPairIdx];
+    const uint32_t idx1 = collisionPair >> 16;
+    const uint32_t idx2 = collisionPair & 0xFFFF;
+
+    for (uint32_t i = 0; i < EquihashType::HashWords; ++i)
+        xoredHashes[idx1 * EquihashType::HashWords + i] ^= hashes[idx2 * EquihashType::HashWords + i];
+}
+
+template<typename EquihashType>
+void EhDevice<EquihashType>::xorCollisions()
+{
+    const uint32_t totalCollisionPairs = vCollisionPairsOffsets[round];
+    const uint32_t numBlocks = (totalCollisionPairs + ThreadsPerBlock - 1) / ThreadsPerBlock;
+
+    const dim3 gridDim(numBlocks);
+    const dim3 blockDim(ThreadsPerBlock);
+
+    uint32_t collisionPairsOffset = 0;
+    if (round > 0)
+        collisionPairsOffset = vCollisionPairsOffsets[round - 1];
+
+    cudaKernel_xorCollisions<EquihashType><<<gridDim, blockDim>>>(
+        hashes.get(), xoredHashes.get(), 
+        collisionPairs.get(), 
+        collisionCounters.get() + round * EquihashType::NBucketCount,
+        collisionPairsOffset, totalCollisionPairs, MaxCollisionsPerBucket);
+
+    // Swap the hash pointers for the next round
+    swap(hashes, xoredHashes);
 }
 
 /**
@@ -316,7 +340,7 @@ uint32_t EhDevice<EquihashType>::findSolutions()
     const dim3 gridDim(numBlocks);
     const dim3 blockDim(ThreadsPerBlock);
 
-    auto collisionPairsOffsets = make_cuda_unique<uint32_t>(vCollisionPairsOffsets.size());
+    auto collisionPairsOffsets = make_gpu_unique<uint32_t>(vCollisionPairsOffsets.size());
     copyToDevice(collisionPairsOffsets.get(), vCollisionPairsOffsets.data(), vCollisionPairsOffsets.size() * sizeof(uint32_t));
 
     cudaKernel_findSolutions<EquihashType><<<gridDim, blockDim>>>(
@@ -337,11 +361,9 @@ uint32_t EhDevice<EquihashType>::findSolutions()
 template<typename EquihashType>
 void EhDevice<EquihashType>::debugPrintHashes()
 {
-    v_uint32 hostHashes;
-    hostHashes.resize(EquihashType::NHashWords);
+    v_uint32 hostHashes(EquihashType::NHashWords);
     copyToHost(hostHashes.data(), hashes.get(), hostHashes.size() * sizeof(uint32_t));
 
-    cout << "Initial hashes (" << hostHashes.size() << "):" << endl;
     // Print out the generated hashes
     size_t hashNo = 0;
     for (size_t i = 0; i < hostHashes.size(); i += EquihashType::HashWords)
@@ -359,46 +381,10 @@ void EhDevice<EquihashType>::debugPrintHashes()
         }
         if (bAllZeroes)
         {
-            cout << "All zeroes !!!" << endl;
+            cout << "All zeroes" << endl;
             break;
         }
         cout << endl;
-    }
-}
-
-template<typename EquihashType>
-void EhDevice<EquihashType>::debugPrintXoredHashes()
-{
-    v_uint32 hostHashes;
-    v_uint32 vBucketCollisionCounts;
-    vBucketCollisionCounts.resize(EquihashType::NBucketCount * (EquihashType::WK + 1));
-    copyToHost(vBucketCollisionCounts.data(), collisionCounters.get(), vBucketCollisionCounts.size() * sizeof(uint32_t));
-    for (uint32_t bucketIdx = 0; bucketIdx < EquihashType::NBucketCount; ++bucketIdx)
-    {
-        size_t hashNo = 0;
-        // auto collisionCountersPtr = collisionCounters.get() + bucketIdx * EquihashType::WK + round;
-        cout << "Bucket #" << dec << bucketIdx << ": " << endl;
-        for (uint32_t i = 0; i < vBucketCollisionCounts[bucketIdx * EquihashType::WK + round]; ++i)
-        {
-            ++hashNo;
-            if (hashNo % 0x1000 != 0)
-                continue;
-            cout << "Hash " << dec << hashNo << ": ";
-            bool bAllZeroes = true;
-            for (size_t j = 0; j < EquihashType::HashWords; ++j)
-            {
-                const uint32_t hashIdx = bucketIdx * EquihashType::NBucketSize + i * EquihashType::HashWords + j;
-                if (hostHashes[hashIdx])
-                    bAllZeroes = false;
-                cout << hex << hostHashes[hashIdx] << " ";
-            }
-            if (bAllZeroes)
-            {
-                cout << "All zeroes !!!" << endl;
-                break;
-            }
-            cout << endl;
-        }
     }
 }
 
@@ -407,19 +393,15 @@ uint32_t EhDevice<EquihashType>::solver()
 {
     // Generate initial hash values
     generateInitialHashes();
+
     debugPrintHashes();
 
     // Perform K rounds of collision detection and XORing
     for (uint32_t round = 0; round < EquihashType::WK; round++)
     {
-        vPrevCollisionPairsOffsets = vCollisionPairsOffsets;
-
         // Detect collisions and XOR the colliding pairs
-        processCollisions();
-        debugPrintXoredHashes();
-
-        // Swap the hash pointers for the next round
-        swap(hashes, xoredHashes);
+        detectCollisions();
+        xorCollisions();
     }
 
     return findSolutions();

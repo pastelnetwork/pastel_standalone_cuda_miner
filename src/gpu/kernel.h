@@ -17,19 +17,18 @@ public:
     EhDevice() noexcept = default;
     ~EhDevice() {}
 
-    std::unique_ptr<blake2b_state, CudaDeleter> initialState;
-    std::unique_ptr<uint32_t, CudaDeleter> hashes;
-    std::unique_ptr<uint32_t, CudaDeleter> xoredHashes;
+    std::unique_ptr<blake2b_state, GpuMemDeleter> initialState;
+    std::unique_ptr<uint32_t, GpuMemDeleter> hashes;
+    std::unique_ptr<uint32_t, GpuMemDeleter> xoredHashes;
 
-    std::unique_ptr<uint32_t, CudaDeleter> collisionPairs;
-    // Accumulated collision pair offsets for each bucket
+    std::unique_ptr<uint32_t, GpuMemDeleter> collisionPairs;
+    // Accumulated collision pair offsets for each round
     v_uint32 vCollisionPairsOffsets;
-    v_uint32 vPrevCollisionPairsOffsets;
-    std::unique_ptr<uint32_t, CudaDeleter> collisionPairOffsets;
-    std::unique_ptr<uint32_t, CudaDeleter> collisionCounters;   
 
-    std::unique_ptr<typename EquihashType::solution, CudaDeleter> solutions;
-    std::unique_ptr<uint32_t, CudaDeleter> solutionCount;
+    std::unique_ptr<uint32_t, GpuMemDeleter> collisionCounters;   
+
+    std::unique_ptr<typename EquihashType::solution, GpuMemDeleter> solutions;
+    std::unique_ptr<uint32_t, GpuMemDeleter> solutionCount;
 
     uint32_t round = 0;
 
@@ -39,13 +38,13 @@ public:
     void copySolutionsToHost(std::vector<typename EquihashType::solution>& vHostSolutions);
 
     static inline constexpr uint32_t ThreadsPerBlock = 256;
-    static inline constexpr uint32_t MaxCollisionsPerBucket = 100'000;
+    static inline constexpr uint32_t MaxCollisionsPerBucket = 50'000;
 
 private:
     void generateInitialHashes();
-    void processCollisions();
+    void detectCollisions();
+    void xorCollisions();
     uint32_t findSolutions();
 
     void debugPrintHashes();
-    void debugPrintXoredHashes();
 };
