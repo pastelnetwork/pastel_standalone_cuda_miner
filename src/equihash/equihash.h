@@ -38,10 +38,11 @@ public:
     static inline constexpr uint32_t ProofSize = 1 << K; // PROOFSIZE=512
     // The number of hash outputs that can be indexed per each hash operation based on N.
      static inline constexpr uint32_t IndicesPerHashOutput = 512 / N;  // HASHESPERBLAKE=2
-    // The output size of the hash in bytes
+    // The output size of the blake2b hash in bytes required 
     static inline constexpr uint32_t HashOutput = IndicesPerHashOutput * N / 8; // HASHOUT=50
+
     // The number of 32-bit words needed to store the hash output
-    static inline constexpr uint32_t HashWords = (HashOutput + sizeof(uint32_t) - 1) / sizeof(uint32_t); // HASHWORDS=13
+    static inline constexpr uint32_t HashWords = (WN / 8 + sizeof(uint32_t) - 1) / sizeof(uint32_t); // HASHWORDS=7
     // The number of bits used to represent a single digit in the Equihash solution
     static inline constexpr uint32_t CollisionBitLength = N / (K + 1); // DIGITBITS=20
     // The number of bytes used to store a single digit of the collision bits.

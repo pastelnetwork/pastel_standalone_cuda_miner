@@ -24,9 +24,9 @@ public:
     std::unique_ptr<uint32_t, CudaDeleter> collisionPairs;
     // Accumulated collision pair offsets for each bucket
     v_uint32 vCollisionPairsOffsets;
-    v_uint32 vPrevCollisionPairsOffsets;
     std::unique_ptr<uint32_t, CudaDeleter> collisionPairOffsets;
     std::unique_ptr<uint32_t, CudaDeleter> collisionCounters;   
+    v_uint32 vCollisionCounters;
 
     std::unique_ptr<typename EquihashType::solution, CudaDeleter> solutions;
     std::unique_ptr<uint32_t, CudaDeleter> solutionCount;
@@ -39,7 +39,7 @@ public:
     void copySolutionsToHost(std::vector<typename EquihashType::solution>& vHostSolutions);
 
     static inline constexpr uint32_t ThreadsPerBlock = 256;
-    static inline constexpr uint32_t MaxCollisionsPerBucket = 100'000;
+    static inline constexpr uint32_t MaxCollisionsPerBucket = 50'000;
 
 private:
     void generateInitialHashes();
@@ -48,4 +48,5 @@ private:
 
     void debugPrintHashes();
     void debugPrintXoredHashes();
+    void debugPrintCollisionPairs();
 };

@@ -1,6 +1,12 @@
 {
   "version": "0.2.0",
   "configurations": [
+  {
+    "name": "CUDA C++: Launch",
+    "type": "cuda-gdb",
+    "request": "launch",
+    "program": ""
+  },
     {
       "name": "CUDA GDB Server: Launch",
       "type": "cuda-gdbserver",
