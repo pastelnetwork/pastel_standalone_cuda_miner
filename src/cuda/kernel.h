@@ -10,6 +10,13 @@
 #include <local_types.h>
 #include <src/cuda/memutils.h>
 
+//#define USE_DEBUG_MODE
+#ifdef USE_DEBUG_MODE
+#define DEBUG_FN(func) func
+#else
+#define DEBUG_FN(func)
+#endif
+
 template<typename EquihashType>
 class EhDevice
 {
@@ -54,4 +61,6 @@ private:
     void debugPrintXoredHashes();
     void debugPrintCollisionPairs();
     void debugPrintBucketCounters(const uint32_t bucketIdx, const uint32_t *collisionCountersPtr);
+    void debugPrintCollisionCounter(const uint32_t bucketOffset, const uint32_t bucketEndIdx,
+        const uint32_t bucketIdx, const uint32_t collisionCount);
 };
