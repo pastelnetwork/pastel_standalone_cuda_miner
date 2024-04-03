@@ -66,6 +66,8 @@ endif()
 target_include_directories(pastel_miner PRIVATE include/ ${CMAKE_SOURCE_DIR})
 target_include_directories(pastel_miner_gtest PRIVATE include/ ${CMAKE_SOURCE_DIR})
 
+target_compile_options(pastel_miner_gtest PRIVATE "$<$<COMPILE_LANGUAGE:CUDA>:-G>")
+
 # Set target properties, if needed (e.g., C++ standard, CUDA architectures)
 set_target_properties(pastel_miner PROPERTIES
 	CUDA_SEPARABLE_COMPILATION ON
