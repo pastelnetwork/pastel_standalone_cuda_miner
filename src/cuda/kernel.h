@@ -18,9 +18,9 @@ public:
     ~EhDevice() {}
 
     std::unique_ptr<blake2b_state, CudaDeleter> initialState;
-    std::unique_ptr<uint32_t, CudaDeleter> hashes;               // NHashStorageWords
-    std::unique_ptr<uint32_t, CudaDeleter> xoredHashes;          // NHashStorageWords
-    std::unique_ptr<uint32_t, CudaDeleter> bucketHashIndices;    // NHashStorageCount * (WK + 1)
+    std::unique_ptr<uint32_t, CudaDeleter> hashes;               // NBucketCount * NBucketSize * HashWords
+    std::unique_ptr<uint32_t, CudaDeleter> xoredHashes;          // NBucketCount * NBucketSize * HashWords
+    std::unique_ptr<uint32_t, CudaDeleter> bucketHashIndices;    // NBucketCount * NBucketSize * (WK + 1)
 
     std::unique_ptr<uint32_t, CudaDeleter> collisionPairs;       // NBucketCount * MaxCollisionsPerBucket
     // Accumulated collision pair offsets for each bucket
@@ -42,6 +42,7 @@ public:
 
     static inline constexpr uint32_t ThreadsPerBlock = 256;
     static inline constexpr uint32_t MaxCollisionsPerBucket = (EquihashType::WK + 1) * EquihashType::NBucketSize; // 10 * 65535 = 655350
+    static inline constexpr uint32_t MaxSolutions = 10000;
 
 private:
     void rebucketHashes();

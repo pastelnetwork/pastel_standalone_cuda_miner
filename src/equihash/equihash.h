@@ -88,7 +88,5 @@ public:
 
 // the maximum number of solutions that can be found by the miner
 constexpr uint32_t MAXSOLUTIONS = 10;
-// the maximum number of solutions that can be found per block in the CUDA kernel
-constexpr uint32_t MAX_SOLUTIONS_PER_BLOCK = 32;
 
 using Eh200_9 = Equihash<200, 9>;
