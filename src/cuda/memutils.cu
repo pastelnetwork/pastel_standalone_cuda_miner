@@ -52,12 +52,22 @@ void CudaDeleter::operator()(void* ptr) const
 template <typename T>
 unique_ptr<T, CudaDeleter> make_cuda_unique(const size_t numElements)
 {
-    T* ptr = nullptr;
-    CUDA_CHECK(cudaMalloc(&ptr, numElements * sizeof(T)));
-    return unique_ptr<T, CudaDeleter>(ptr);
+    T* devPtr = nullptr;
+    CUDA_CHECK(cudaMalloc(&devPtr, numElements * sizeof(T)));
+    return unique_ptr<T, CudaDeleter>(devPtr);
+}
+
+template <typename T>
+unique_ptr<T, CudaDeleter> make_cuda_unique_2d(const size_t rowSize, const size_t columnSize, size_t &pitch)
+{
+    T* devPtr = nullptr;
+    CUDA_CHECK(cudaMallocPitch(&devPtr, &pitch, rowSize * sizeof(T), columnSize));
+    return unique_ptr<T, CudaDeleter>(devPtr);
 }
 
 template std::unique_ptr<uint32_t, CudaDeleter> make_cuda_unique<uint32_t>(const size_t numElements);
 template std::unique_ptr<uint32_t*, CudaDeleter> make_cuda_unique<uint32_t*>(const size_t numElements);
 template std::unique_ptr<blake2b_state, CudaDeleter> make_cuda_unique<blake2b_state>(const size_t numElements);
 template std::unique_ptr<Eh200_9::solution, CudaDeleter> make_cuda_unique<Eh200_9::solution>(const size_t numElements);
+
+template std::unique_ptr<uint32_t, CudaDeleter> make_cuda_unique_2d(const size_t rowSize, const size_t columnSize, size_t &pitch);

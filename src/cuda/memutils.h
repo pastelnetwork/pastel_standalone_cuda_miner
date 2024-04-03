@@ -19,6 +19,8 @@ struct CudaDeleter
 template <typename T>
 std::unique_ptr<T, CudaDeleter> make_cuda_unique(const size_t numElements);
 
+template <typename T>
+std::unique_ptr<T, CudaDeleter> make_cuda_unique_2d(const size_t rowSize, const size_t columnSize, size_t &pitch);
 
 void copyToDevice(void* dst, const void* src, const size_t size);
 void copyToHost(void* dst, const void* src, const size_t size);

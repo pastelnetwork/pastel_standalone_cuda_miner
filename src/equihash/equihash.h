@@ -74,6 +74,7 @@ public:
     static inline constexpr uint32_t NBucketCount = (NHashes + NBucketSize - 1) / NBucketSize; // 33
     static inline constexpr uint32_t NHashStorageCount = NBucketCount * NBucketSize; // 2'147'680
     static inline constexpr uint32_t NHashStorageWords = NHashStorageCount * HashWords; // 150'236'160
+    static inline constexpr uint32_t OverflowBucketIndex = NBucketCount - 1; // 32
 
     typedef struct _solution 
     {

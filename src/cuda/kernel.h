@@ -18,19 +18,20 @@ public:
     ~EhDevice() {}
 
     std::unique_ptr<blake2b_state, CudaDeleter> initialState;
-    std::unique_ptr<uint32_t, CudaDeleter> hashes;
-    std::unique_ptr<uint32_t, CudaDeleter> xoredHashes;
-    std::unique_ptr<uint32_t, CudaDeleter> bucketHashIndices;
+    std::unique_ptr<uint32_t, CudaDeleter> hashes;               // NHashStorageWords
+    std::unique_ptr<uint32_t, CudaDeleter> xoredHashes;          // NHashStorageWords
+    std::unique_ptr<uint32_t, CudaDeleter> bucketHashIndices;    // NHashStorageCount * (WK + 1)
 
-    std::unique_ptr<uint32_t, CudaDeleter> collisionPairs;
+    std::unique_ptr<uint32_t, CudaDeleter> collisionPairs;       // NBucketCount * MaxCollisionsPerBucket
     // Accumulated collision pair offsets for each bucket
-    v_uint32 vCollisionPairsOffsets;
-    std::unique_ptr<uint32_t, CudaDeleter> collisionPairOffsets;
-    std::unique_ptr<uint32_t, CudaDeleter> collisionCounters;   
-    v_uint32 vCollisionCounters;
+    v_uint32 vCollisionPairsOffsets;                             // NBucketCount
+    v_uint32 vPrevCollisionPairsOffsets;                         // NBucketCount
+    std::unique_ptr<uint32_t, CudaDeleter> collisionPairOffsets; // NBucketCount
+    std::unique_ptr<uint32_t, CudaDeleter> collisionCounters;    // NBucketCount * (WK + 1)
+    v_uint32 vCollisionCounters;                                 // NBucketCount
 
-    std::unique_ptr<typename EquihashType::solution, CudaDeleter> solutions;
-    std::unique_ptr<uint32_t, CudaDeleter> solutionCount;
+    std::unique_ptr<typename EquihashType::solution, CudaDeleter> solutions; // MAXSOLUTIONS
+    std::unique_ptr<uint32_t, CudaDeleter> solutionCount;        // 1
 
     uint32_t round = 0;
 
@@ -40,10 +41,10 @@ public:
     void copySolutionsToHost(std::vector<typename EquihashType::solution>& vHostSolutions);
 
     static inline constexpr uint32_t ThreadsPerBlock = 256;
-    static inline constexpr uint32_t MaxCollisionsPerBucket = 50'000;
+    static inline constexpr uint32_t MaxCollisionsPerBucket = (EquihashType::WK + 1) * EquihashType::NBucketSize; // 10 * 65535 = 655350
 
 private:
-    void putHashesIntoBuckets();
+    void rebucketHashes();
     void generateInitialHashes();
     void processCollisions();
     uint32_t findSolutions();
@@ -51,4 +52,5 @@ private:
     void debugPrintHashes(const bool bIsBucketed);
     void debugPrintXoredHashes();
     void debugPrintCollisionPairs();
+    void debugPrintBucketCounters(const uint32_t bucketIdx, const uint32_t *collisionCountersPtr);
 };
