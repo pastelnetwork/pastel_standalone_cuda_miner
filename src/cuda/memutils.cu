@@ -68,6 +68,6 @@ unique_ptr<T, CudaDeleter> make_cuda_unique_2d(const size_t rowSize, const size_
 template std::unique_ptr<uint32_t, CudaDeleter> make_cuda_unique<uint32_t>(const size_t numElements);
 template std::unique_ptr<uint32_t*, CudaDeleter> make_cuda_unique<uint32_t*>(const size_t numElements);
 template std::unique_ptr<blake2b_state, CudaDeleter> make_cuda_unique<blake2b_state>(const size_t numElements);
-template std::unique_ptr<Eh200_9::solution_device_type, CudaDeleter> make_cuda_unique<Eh200_9::solution_device_type>(const size_t numElements);
+template std::unique_ptr<Eh200_9::solution_type, CudaDeleter> make_cuda_unique<Eh200_9::solution_type>(const size_t numElements);
 
 template std::unique_ptr<uint32_t, CudaDeleter> make_cuda_unique_2d(const size_t rowSize, const size_t columnSize, size_t &pitch);

@@ -46,10 +46,13 @@ uint32_t miningLoop(const blake2b_state& initialState, uint32_t &nExtraNonce2, c
 
         // check solutions
         v_uint8 solutionMinimal;
+        v_uint32 vSolution;
+        vSolution.resize(EquihashType::ProofSize);
         string sError;
         for (const auto& solution : vHostSolutions)
         {
-            solutionMinimal = GetMinimalFromIndices(solution, EquihashType::CollisionBitLength);
+            memcpy(vSolution.data(), &solution.indices, sizeof(solution.indices));
+            solutionMinimal = GetMinimalFromIndices(vSolution, EquihashType::CollisionBitLength);
             if (!eh.IsValidSolution(sError, currState, solutionMinimal))
             {
                 cerr << "Invalid solution: " << sError << endl;

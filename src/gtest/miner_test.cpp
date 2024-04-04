@@ -27,7 +27,7 @@ TEST(MinerTest, CollisionBitMask)
             wordOffset = Eh200_9::HashWords - 2;
         const uint32_t bitOffset = globalBitOffset - wordOffset * numeric_limits<uint32_t>::digits;
         const uint64_t collisionBitMask = ((1ULL << collisionBitLength) - 1) << bitOffset;
-        cout << "round: " << round << ", word-offset: " << dec << wordOffset << ", collisionBitMask: " << hex << setfill('0') << setw(16) << collisionBitMask << endl;
+        cout << "round: " << round << ", word-offset: " << dec << wordOffset << ", collisionBitMask: " << hex << setfill('0') << setw(16) << collisionBitMask << dec << endl;
     }
 }
 

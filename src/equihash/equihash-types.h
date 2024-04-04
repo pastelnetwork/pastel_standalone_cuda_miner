@@ -72,11 +72,10 @@ public:
     static inline constexpr uint32_t NHashStorageWords = NHashStorageCount * HashWords; // 150'236'160
     static inline constexpr uint32_t OverflowBucketIndex = NBucketCount - 1; // 32
 
-    using solution_device_type = struct
+    using solution_type = struct
     {
         eh_index indices[ProofSize];
     };
-    using solution_type = v_uint32;
 };
 
 using Eh200_9 = Equihash<200, 9>;

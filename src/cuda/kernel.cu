@@ -10,6 +10,9 @@
 #include <limits>
 #include <iomanip>
 #include <numeric>
+#include <chrono>
+
+#include <tinyformat.h>
 
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
@@ -63,7 +66,7 @@ bool EhDevice<EquihashType>::allocate_memory()
         vPrevCollisionPairsOffsets.resize(EquihashType::NBucketCount, 0);
 
         // Allocate device memory for solutions and solution count
-        solutions = make_cuda_unique<typename EquihashType::solution_device_type>(MaxSolutions);
+        solutions = make_cuda_unique<typename EquihashType::solution_type>(MaxSolutions);
         solutionCount = make_cuda_unique<uint32_t>(1);
 
         return true;
@@ -416,7 +419,7 @@ __global__ void cudaKernel_findSolutions(
     const uint32_t* collisionPairOffsets,
     const uint32_t* collisionCounters,
     const uint32_t* bucketHashIndices,
-    typename EquihashType::solution_device_type* solutions, uint32_t* solutionCount,
+    typename EquihashType::solution_type* solutions, uint32_t* solutionCount,
     const uint32_t maxCollisionsPerBucket,
     const uint32_t maxSolutionCount,
     const uint32_t bucketIdx, 
@@ -575,6 +578,7 @@ void EhDevice<EquihashType>::debugPrintHashes(const bool bIsBucketed)
             }
             cout << endl;
         }
+        cout << dec;
     }
     // print hashes count in each bucket
     if (bIsBucketed)
@@ -630,6 +634,7 @@ void EhDevice<EquihashType>::debugPrintXoredHashes()
                 continue;
             }
         }
+        cout << dec;
     }
 }
 
@@ -680,11 +685,8 @@ void EhDevice<EquihashType>::copySolutionsToHost(vector<typename EquihashType::s
     uint32_t nSolutionCount = 0;
     copyToHost(&nSolutionCount, solutionCount.get(), sizeof(uint32_t));
 
-    vHostSolutions.clear();
     // Resize the host solutions vector
     vHostSolutions.resize(nSolutionCount);
-    for (size_t i = 0; i < nSolutionCount; ++i)
-        vHostSolutions[i].resize(EquihashType::ProofSize);
 
     // Copy the solutions from device to host
     copyToHost(vHostSolutions.data(), solutions.get(), nSolutionCount * EquihashType::ProofSize);
@@ -694,27 +696,37 @@ template<typename EquihashType>
 uint32_t EhDevice<EquihashType>::solver()
 {
     // Generate initial hash values
+    EQUI_TIMER_DEFINE;
+    EQUI_TIMER_START;
     generateInitialHashes();
+    EQUI_TIMER_STOP("Initial hash generation");
     DEBUG_FN(debugPrintHashes(false));
 
     // Perform K rounds of collision detection and XORing
     while (round < EquihashType::WK)
     {
+        EQUI_TIMER_START;
         rebucketHashes();
+        EQUI_TIMER_STOP(strprintf("Round [%u], rebucketing", round));
 
         swap(hashes, xoredHashes);
         DEBUG_FN(debugPrintHashes(true));
 
         // Detect collisions and XOR the colliding hashes
+        EQUI_TIMER_START;
         processCollisions();
+        EQUI_TIMER_STOP(strprintf("Round [%u], collisions", round));
         DEBUG_FN(debugPrintCollisionPairs());
         DEBUG_FN(debugPrintXoredHashes());
 
         // Swap the hash pointers for the next round
         swap(hashes, xoredHashes);
         ++round;
+        cout << "Round #" << dec << round << " completed" << endl;
     }
+    EQUI_TIMER_START;
     rebucketHashes();
+    EQUI_TIMER_STOP(strprintf("Round [%u], rebucketing", round));
     swap(hashes, xoredHashes);
     DEBUG_FN(debugPrintHashes(true));
 

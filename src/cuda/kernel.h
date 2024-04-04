@@ -17,6 +17,18 @@
 #define DEBUG_FN(func)
 #endif
 
+#define EQUI_TIMER
+#ifdef EQUI_TIMER
+#define EQUI_TIMER_DEFINE std::chrono::high_resolution_clock::time_point eq_timer_start, eq_timer_stop;
+#define EQUI_TIMER_START eq_timer_start = std::chrono::high_resolution_clock::now();
+#define EQUI_TIMER_STOP(operation)  eq_timer_stop = std::chrono::high_resolution_clock::now(); \
+    std::cout << operation << ": " << std::chrono::duration_cast<std::chrono::milliseconds>(eq_timer_stop - eq_timer_start).count() << " ms" << std::endl;
+#else
+#define EQUI_TIMER_DEFINE()
+#define EQUI_TIMER_START()
+#define EQUI_TIMER_STOP(operation)
+#endif
+
 template<typename EquihashType>
 class EhDevice
 {
@@ -37,7 +49,7 @@ public:
     std::unique_ptr<uint32_t, CudaDeleter> collisionCounters;    // NBucketCount * (WK + 1)
     v_uint32 vCollisionCounters;                                 // NBucketCount
 
-    std::unique_ptr<typename EquihashType::solution_device_type, CudaDeleter> solutions; // MAXSOLUTIONS
+    std::unique_ptr<typename EquihashType::solution_type, CudaDeleter> solutions; // MAXSOLUTIONS
     std::unique_ptr<uint32_t, CudaDeleter> solutionCount;        // 1
 
     uint32_t round = 0;
