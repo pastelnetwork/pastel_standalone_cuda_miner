@@ -37,7 +37,7 @@ public:
     std::unique_ptr<uint32_t, CudaDeleter> collisionCounters;    // NBucketCount * (WK + 1)
     v_uint32 vCollisionCounters;                                 // NBucketCount
 
-    std::unique_ptr<typename EquihashType::solution, CudaDeleter> solutions; // MAXSOLUTIONS
+    std::unique_ptr<typename EquihashType::solution_device_type, CudaDeleter> solutions; // MAXSOLUTIONS
     std::unique_ptr<uint32_t, CudaDeleter> solutionCount;        // 1
 
     uint32_t round = 0;
@@ -45,7 +45,7 @@ public:
     bool allocate_memory();
     uint32_t solver();
 
-    void copySolutionsToHost(std::vector<typename EquihashType::solution>& vHostSolutions);
+    void copySolutionsToHost(std::vector<typename EquihashType::solution_type>& vHostSolutions);
 
     static inline constexpr uint32_t ThreadsPerBlock = 256;
     static inline constexpr uint32_t MaxCollisionsPerBucket = (EquihashType::WK + 1) * EquihashType::NBucketSize; // 10 * 65535 = 655350

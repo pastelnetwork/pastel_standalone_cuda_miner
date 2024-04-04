@@ -27,8 +27,15 @@ public:
     std::string sPastelID;        // mnid of the SN that mined the block (public key to verify signature)
     v_uint8 prevMerkleRootSignature; // signature for the merkle root hash of the previous block signed with the SN private key
 
-    CBlockHeader() noexcept = default;
+    CBlockHeader() noexcept;
     virtual ~CBlockHeader() noexcept = default;
+
+    CBlockHeader(CBlockHeader&& hdr) noexcept;
+    CBlockHeader& operator=(CBlockHeader&& hdr) noexcept;
+    CBlockHeader(const CBlockHeader& hdr) noexcept;
+    CBlockHeader& operator=(const CBlockHeader& hdr) noexcept;
+    CBlockHeader& copy_from(const CBlockHeader& hdr) noexcept;
+    CBlockHeader& move_from(CBlockHeader&& hdr) noexcept;
 
     void Clear() noexcept
     {

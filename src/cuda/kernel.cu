@@ -63,7 +63,7 @@ bool EhDevice<EquihashType>::allocate_memory()
         vPrevCollisionPairsOffsets.resize(EquihashType::NBucketCount, 0);
 
         // Allocate device memory for solutions and solution count
-        solutions = make_cuda_unique<typename EquihashType::solution>(MaxSolutions);
+        solutions = make_cuda_unique<typename EquihashType::solution_device_type>(MaxSolutions);
         solutionCount = make_cuda_unique<uint32_t>(1);
 
         return true;
@@ -416,7 +416,7 @@ __global__ void cudaKernel_findSolutions(
     const uint32_t* collisionPairOffsets,
     const uint32_t* collisionCounters,
     const uint32_t* bucketHashIndices,
-    typename EquihashType::solution* solutions, uint32_t* solutionCount,
+    typename EquihashType::solution_device_type* solutions, uint32_t* solutionCount,
     const uint32_t maxCollisionsPerBucket,
     const uint32_t maxSolutionCount,
     const uint32_t bucketIdx, 
@@ -675,6 +675,22 @@ void EhDevice<EquihashType>::debugPrintCollisionPairs()
 }
 
 template<typename EquihashType>
+void EhDevice<EquihashType>::copySolutionsToHost(vector<typename EquihashType::solution_type> &vHostSolutions)
+{
+    uint32_t nSolutionCount = 0;
+    copyToHost(&nSolutionCount, solutionCount.get(), sizeof(uint32_t));
+
+    vHostSolutions.clear();
+    // Resize the host solutions vector
+    vHostSolutions.resize(nSolutionCount);
+    for (size_t i = 0; i < nSolutionCount; ++i)
+        vHostSolutions[i].resize(EquihashType::ProofSize);
+
+    // Copy the solutions from device to host
+    copyToHost(vHostSolutions.data(), solutions.get(), nSolutionCount * EquihashType::ProofSize);
+}
+
+template<typename EquihashType>
 uint32_t EhDevice<EquihashType>::solver()
 {
     // Generate initial hash values
@@ -705,19 +721,5 @@ uint32_t EhDevice<EquihashType>::solver()
     return findSolutions();
 }
 
-template<typename EquihashType>
-void EhDevice<EquihashType>::copySolutionsToHost(vector<typename EquihashType::solution> &vHostSolutions)
-{
-    uint32_t nSolutionCount = 0;
-    copyToHost(&nSolutionCount, solutionCount.get(), sizeof(uint32_t));
-
-    vHostSolutions.clear();
-    // Resize the host solutions vector
-    vHostSolutions.resize(nSolutionCount);
-
-    // Copy the solutions from device to host
-    copyToHost(vHostSolutions.data(), solutions.get(), nSolutionCount * EquihashType::ProofSize);
-}
-
 // Explicit template instantiation
-template class EhDevice<Eh200_9>;
+template class EhDevice<EquihashSolver<200, 9>>;

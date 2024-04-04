@@ -33,3 +33,65 @@ string serializeBlockHeader(const CBlockHeader& block,
 
     return blockHeader;
 }
+
+CBlockHeader::CBlockHeader() noexcept
+{
+    Clear();
+}
+
+CBlockHeader::CBlockHeader(CBlockHeader&& hdr) noexcept
+{
+    move_from(move(hdr));
+}
+
+CBlockHeader& CBlockHeader::operator=(CBlockHeader&& hdr) noexcept
+{
+    if (this != &hdr)
+    {
+        move_from(move(hdr));
+        hdr.Clear();
+    }
+    return *this;
+}
+
+CBlockHeader::CBlockHeader(const CBlockHeader& hdr) noexcept
+{
+    copy_from(hdr);
+}
+
+CBlockHeader& CBlockHeader::operator=(const CBlockHeader& hdr) noexcept
+{
+    if (this != &hdr)
+        copy_from(hdr);
+    return *this;
+}
+
+CBlockHeader& CBlockHeader::copy_from(const CBlockHeader& hdr) noexcept
+{
+    nVersion = hdr.nVersion;
+    hashPrevBlock = hdr.hashPrevBlock;
+    hashMerkleRoot = hdr.hashMerkleRoot;
+    hashFinalSaplingRoot = hdr.hashFinalSaplingRoot;
+    nTime = hdr.nTime;
+    nBits = hdr.nBits;
+    nNonce = hdr.nNonce;
+    nSolution = hdr.nSolution;
+    sPastelID = hdr.sPastelID;
+    prevMerkleRootSignature = hdr.prevMerkleRootSignature;
+    return *this;
+}
+
+CBlockHeader& CBlockHeader::move_from(CBlockHeader&& hdr) noexcept
+{
+    nVersion = hdr.nVersion;
+    hashPrevBlock = move(hdr.hashPrevBlock);
+    hashMerkleRoot = move(hdr.hashMerkleRoot);
+    hashFinalSaplingRoot = move(hdr.hashFinalSaplingRoot);
+    nTime = hdr.nTime;
+    nBits = hdr.nBits;
+    nNonce = move(hdr.nNonce);
+    nSolution = move(hdr.nSolution);
+    sPastelID = move(hdr.sPastelID);
+    prevMerkleRootSignature = move(hdr.prevMerkleRootSignature);
+    return *this;
+}

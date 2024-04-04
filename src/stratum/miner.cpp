@@ -5,6 +5,7 @@
 #include <src/utils/random.h>
 #include <src/utils/strencodings.h>
 #include <src/equihash/equihash.h>
+#include <src/equihash/equihash-helper.h>
 #include <src/equihash/blake2b_host.h>
 #include <local_types.h>
 #include <src/cuda/memutils.h>
@@ -18,13 +19,14 @@ uint32_t miningLoop(const blake2b_state& initialState, uint32_t &nExtraNonce2, c
                     const funcGenerateNonce_t &genNonceFn, const funcSubmitSolution_t &submitSolutionFn)
 {
     EhDevice<EquihashType> devStore;
+    auto eh = EquihashSolver<EquihashType::WN, EquihashType::WK>();
     if (!devStore.allocate_memory())
     {
         cerr << "Failed to allocate CUDA memory for Equihash solver" << endl;
         return 0;
     }    
 
-    vector<typename EquihashType::solution> vHostSolutions;
+    vector<typename EquihashType::solution_type> vHostSolutions;
     uint32_t nTotalSolutionCount = 0;
 
     for (uint32_t i = 0; i < nIterations; ++i)
@@ -42,13 +44,22 @@ uint32_t miningLoop(const blake2b_state& initialState, uint32_t &nExtraNonce2, c
         if (nSolutionCount > 0)
             devStore.copySolutionsToHost(vHostSolutions);
 
-        // Process the solutions and submit them
+        // check solutions
+        v_uint8 solutionMinimal;
+        string sError;
         for (const auto& solution : vHostSolutions)
         {
-            string sHexSolution = HexStr(solution.indices, solution.indices + EquihashType::ProofSize);
+            solutionMinimal = GetMinimalFromIndices(solution, EquihashType::CollisionBitLength);
+            if (!eh.IsValidSolution(sError, currState, solutionMinimal))
+            {
+                cerr << "Invalid solution: " << sError << endl;
+                continue;
+            }
+
+            string sHexSolution = HexStr(solutionMinimal);
             submitSolutionFn(nExtraNonce2, sTime, nonce.GetHex(), sHexSolution);
         }
-        
+
         ++nExtraNonce2;
     }
 
@@ -65,7 +76,7 @@ void miner(CStratumClient &client)
     // Initialize and update the first blake2b_state
     string sPersString = client.getPersString();
 
-    using eh_type = Eh200_9;
+    using eh_type = EquihashSolver<200, 9>;
     auto eh = eh_type();
     blake2b_state state;
     eh.InitializeState(state, sPersString);

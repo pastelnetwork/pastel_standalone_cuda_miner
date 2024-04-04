@@ -36,7 +36,8 @@ TEST(MinerTest, MiningLoop)
 {
     // Set up initial blake2b_state
     blake2b_state state;
-    auto eh = Eh200_9();
+   
+    auto eh = EhSolver200_9();
 
     eh.InitializeState(state, DEFAULT_EQUIHASH_PERS_STRING);
 
@@ -80,7 +81,7 @@ TEST(MinerTest, MiningLoop)
     };
 
     // Call the miningLoop function
-    uint32_t solutionCount = miningLoop<Eh200_9>(state, nExtraNonce2, sTime, nIterations, threadsPerBlock, generateNonceFn, submitSolutionFn);
+    uint32_t solutionCount = miningLoop<EhSolver200_9>(state, nExtraNonce2, sTime, nIterations, threadsPerBlock, generateNonceFn, submitSolutionFn);
 
     size_t i = 0;
     for (const auto& solution : vHexSolutions)

@@ -25,7 +25,7 @@ add_executable(pastel_miner)
 add_executable(pastel_miner_gtest)
 
 file(GLOB SRC_UTILS     "src/utils/*.cpp")
-file(GLOB SRC_EQUIHASH  "src/equihash/*.cu" "src/equihash/*.cpp")
+file(GLOB SRC_EQUIHASH  "src/equihash/*.cpp")
 file(GLOB SRC_STRATUM   "src/stratum/*.cpp")
 file(GLOB SRC_CUDA      "src/cuda/*.cu")
 file(GLOB SRC_MAIN      "src/main.cpp")
