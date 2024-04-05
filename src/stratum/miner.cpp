@@ -8,8 +8,8 @@
 #include <src/equihash/equihash-helper.h>
 #include <src/equihash/blake2b_host.h>
 #include <local_types.h>
-#include <src/cuda/memutils.h>
-#include <src/cuda/kernel.h>
+#include <src/kernel/memutils.h>
+#include <src/kernel/kernel.h>
 
 using namespace std;
 

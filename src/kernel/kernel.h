@@ -8,7 +8,7 @@
 
 #include <blake2b.h>
 #include <local_types.h>
-#include <src/cuda/memutils.h>
+#include <src/kernel/memutils.h>
 
 //#define USE_DEBUG_MODE
 #ifdef USE_DEBUG_MODE
@@ -41,6 +41,7 @@ public:
     std::unique_ptr<uint32_t, CudaDeleter> xoredHashes;          // NBucketCount * NBucketSize * HashWords
     std::unique_ptr<uint32_t, CudaDeleter> bucketHashIndices;    // NBucketCount * NBucketSize * (WK + 1)
 
+    std::unique_ptr<uint32_t, CudaDeleter> discardedCounter;     // 1
     std::unique_ptr<uint32_t, CudaDeleter> collisionPairs;       // NBucketCount * MaxCollisionsPerBucket
     // Accumulated collision pair offsets for each bucket
     v_uint32 vCollisionPairsOffsets;                             // NBucketCount

@@ -7,8 +7,8 @@ endif()
 # Set the CUDA architectures
 set(CMAKE_CUDA_ARCHITECTURES 61;75;86)
 
-project(pastel_miner VERSION 1.0 LANGUAGES CXX CUDA)
 project(pastel_miner_gtest VERSION 1.0 LANGUAGES CXX CUDA)
+project(pastel_miner VERSION 1.0 LANGUAGES CXX CUDA)
 
 enable_language(CUDA)
 
@@ -27,7 +27,7 @@ add_executable(pastel_miner_gtest)
 file(GLOB SRC_UTILS     "src/utils/*.cpp")
 file(GLOB SRC_EQUIHASH  "src/equihash/*.cpp")
 file(GLOB SRC_STRATUM   "src/stratum/*.cpp")
-file(GLOB SRC_CUDA      "src/cuda/*.cu")
+file(GLOB SRC_KERNEL    "src/kernel/*.cu")
 file(GLOB SRC_MAIN      "src/main.cpp")
 
 file(GLOB SRC_GTEST     "src/gtest/*.cpp")
@@ -37,7 +37,7 @@ target_sources(pastel_miner
 		${SRC_UTILS}
 		${SRC_EQUIHASH}
 		${SRC_STRATUM}
-		${SRC_CUDA}
+		${SRC_KERNEL}
 		${SRC_MAIN}
 )
 
@@ -46,7 +46,7 @@ target_sources(pastel_miner_gtest
 		${SRC_UTILS}
 		${SRC_EQUIHASH}
 		${SRC_STRATUM}
-		${SRC_CUDA}
+		${SRC_KERNEL}
 		${SRC_GTEST}
 )
 

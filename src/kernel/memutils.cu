@@ -3,7 +3,7 @@
 // file COPYING or https://www.opensource.org/licenses/mit-license.php.
 #include <iostream>
 
-#include <src/cuda/memutils.h>
+#include <src/kernel/memutils.h>
 #include <src/equihash/equihash.h>
 #include <blake2b.h>
 

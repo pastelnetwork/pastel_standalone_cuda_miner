@@ -9,6 +9,17 @@
 using eh_index = uint32_t;
 using eh_trunc = uint8_t;
 
+inline constexpr int COUNT_BITS(unsigned int N)
+{
+    int bits = 0;
+    while (N > 0)
+    {
+        bits++;
+        N >>= 1;
+    }
+    return bits;
+}
+
 /**
  * The Equihash class provides a set of constants for the Equihash proof-of-work algorithm.
  * 
@@ -36,9 +47,12 @@ public:
      static inline constexpr uint32_t IndicesPerHashOutput = 512 / N;  // HASHESPERBLAKE=2
     // The output size of the blake2b hash in bytes required 
     static inline constexpr uint32_t HashOutput = IndicesPerHashOutput * N / 8; // HASHOUT=50
+    static inline constexpr uint32_t SingleHashOutput = WN / 8; // SINGLEHASHOUT=25
 
     // The number of 32-bit words needed to store the hash output
     static inline constexpr uint32_t HashWords = (WN / 8 + sizeof(uint32_t) - 1) / sizeof(uint32_t); // HASHWORDS=7
+    static inline constexpr uint32_t HashFullWords = SingleHashOutput / sizeof(uint32_t); // HASHFULLWORDS=6
+    static inline constexpr uint32_t HashPartialBytesLeft = SingleHashOutput % sizeof(uint32_t); // HASHPARTIALBYTESLEFT=1
     // The number of bits used to represent a single digit in the Equihash solution
     static inline constexpr uint32_t CollisionBitLength = N / (K + 1); // DIGITBITS=20
     // The number of bytes used to store a single digit of the collision bits.
@@ -59,18 +73,15 @@ public:
     // the base value used in the equihash algorithm
     static inline constexpr uint32_t Base = 1 << CollisionBitLength; // 1'048'576
     // the total number of hashes required for the equihash algorithm
-    static inline constexpr uint32_t NHashes = 2 * Base; // 2'097'152
+    static inline constexpr uint32_t NHashes = IndicesPerHashOutput * Base; // 2'097'152
     // the total number of hashes words required for the equihash algorithm
     static inline constexpr uint32_t NHashWords = NHashes * HashWords;
-    // the number of slots in the equihash algorithm
-    static inline constexpr uint32_t NSlots = Base; // 1'048'576
-    // the number of 32-bit slot bitmaps
-    static inline constexpr uint32_t NSlotBitmaps = NSlots / 32;
-    static inline constexpr uint32_t NBucketSize = UINT16_MAX; // 65'535
-    static inline constexpr uint32_t NBucketCount = (NHashes + NBucketSize - 1) / NBucketSize; // 33
-    static inline constexpr uint32_t NHashStorageCount = NBucketCount * NBucketSize; // 2'147'680
-    static inline constexpr uint32_t NHashStorageWords = NHashStorageCount * HashWords; // 150'236'160
-    static inline constexpr uint32_t OverflowBucketIndex = NBucketCount - 1; // 32
+    static inline constexpr uint32_t NBucketSize = 256;
+    static inline constexpr uint32_t NBucketCount = (NHashes + NBucketSize - 1) / NBucketSize; // 8'192
+    static inline constexpr uint32_t NBucketIdxBits = COUNT_BITS(NBucketCount - 1); // 13
+    static inline constexpr uint32_t NBucketIdxMask = NBucketCount - 1; // 8'191
+    static inline constexpr uint32_t NHashStorageCount = NBucketCount * NBucketSize;
+    static inline constexpr uint32_t NHashStorageWords = NBucketCount * NBucketSize * HashWords; // 8'192 * 256 * 7 = 14'680'064 
 
     using solution_type = struct
     {

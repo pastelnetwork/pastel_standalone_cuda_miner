@@ -2,7 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://www.opensource.org/licenses/mit-license.php.
 
-#include <src/cuda/memutils.h>
+#include <src/kernel/memutils.h>
 #include <blake2b.h>
 
 __device__ __constant__ uint8_t blake2b_sigma[12][16] = {

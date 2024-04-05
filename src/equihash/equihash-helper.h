@@ -69,7 +69,10 @@ public:
     
     FullStepRow& operator=(const FullStepRow<WIDTH>& a);
 
-    inline bool IndicesBefore(const FullStepRow<WIDTH>& a, size_t len, size_t lenIndices) const { return memcmp(hash+len, a.hash+len, lenIndices) < 0; }
+    inline bool IndicesBefore(const FullStepRow<WIDTH>& a, size_t len, size_t lenIndices) const noexcept
+    {
+        return memcmp(hash+len, a.hash+len, lenIndices) < 0;
+    }
     v_uint8 GetIndices(size_t len, size_t lenIndices, size_t cBitLen) const;
 
     template<size_t W>
