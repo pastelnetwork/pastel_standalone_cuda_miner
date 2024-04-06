@@ -129,9 +129,11 @@ __global__ void cudaKernel_generateInitialHashes(const blake2b_state* state, uin
         blake2b_update_device(&localState, reinterpret_cast<const uint8_t*>(&hashInputIdx), sizeof(hashInputIdx));
         blake2b_final_device(&localState, hash, EquihashType::HashOutput);
 
+        uint32_t curHashIdx = hashInputIdx * EquihashType::IndicesPerHashOutput;
+        const uint32_t curBucketIdx = curHashIdx / EquihashType::NBucketSize;
+        uint32_t hashOffset = 0;
         for (uint32_t j = 0; j < EquihashType::IndicesPerHashOutput; ++j)
         {
-            auto hashOffset = j * EquihashType::SingleHashOutput;
             // map the output hash index to the appropriate bucket
             // and store the hash in the corresponding bucket
             // index format: [F][CC][B BBBB BBBB BBBB] [NNNN NNNN NNNN NNNN]
@@ -148,8 +150,6 @@ __global__ void cudaKernel_generateInitialHashes(const blake2b_state* state, uin
             const uint32_t bucketHashIdx = bucketIdx * EquihashType::NBucketSize + hashIdxInBucket;
             const uint32_t bucketHashIdxPtr = bucketHashIdx * EquihashType::HashWords;
 
-            const uint32_t curHashIdx = hashInputIdx * EquihashType::IndicesPerHashOutput;
-            const uint32_t curBucketIdx = curHashIdx / EquihashType::NBucketSize;
             const uint32_t curHashIdxInBucket = curHashIdx % EquihashType::NBucketSize;
             const uint32_t bucketHashStoredIdx = curBucketIdx << 16 | curHashIdxInBucket;
             bucketHashIndices[bucketHashIdx] = bucketHashStoredIdx;
@@ -157,9 +157,9 @@ __global__ void cudaKernel_generateInitialHashes(const blake2b_state* state, uin
             for (uint32_t k = 0; k < EquihashType::HashFullWords; ++k)
             {
                 hashes[bucketHashIdxPtr + k] = 
-                    (static_cast<uint32_t>hash[hashOffset + 3]) << 24) | 
+                    (static_cast<uint32_t>(hash[hashOffset + 3]) << 24) | 
                     (static_cast<uint32_t>(hash[hashOffset + 2]) << 16) | 
-                    (static_cast<uint32_t>(hashOffset[hashOffset + 1]) << 8) | 
+                    (static_cast<uint32_t>(hash[hashOffset + 1]) << 8) | 
                     static_cast<uint32_t>(hash[hashOffset]);
                 hashOffset += sizeof(uint32_t);
             }
@@ -170,6 +170,7 @@ __global__ void cudaKernel_generateInitialHashes(const blake2b_state* state, uin
                     nWord |= static_cast<uint32_t>(hash[hashOffset++]) << (k * 8);
                 hashes[bucketHashIdxPtr + EquihashType::HashFullWords] = nWord;
             }
+            ++curHashIdx;
         }
         ++hashInputIdx;
     }
@@ -182,11 +183,8 @@ void EhDevice<EquihashType>::generateInitialHashes()
     const uint32_t numHashCallsPerThread = EquihashType::NBucketSize;
     const uint32_t numThreads = (numHashCalls + numHashCallsPerThread - 1) / numHashCallsPerThread;
     
-    // dim3 gridDim((numThreads + ThreadsPerBlock - 1) / ThreadsPerBlock);
-    // dim3 blockDim(ThreadsPerBlock);
-
-    dim3 gridDim(1);
-    dim3 blockDim(2);
+    dim3 gridDim((numThreads + ThreadsPerBlock - 1) / ThreadsPerBlock);
+    dim3 blockDim(ThreadsPerBlock);
     
     cudaKernel_generateInitialHashes<EquihashType><<<gridDim, blockDim>>>(initialState.get(), hashes.get(), 
         bucketHashIndices.get(), collisionCounters.get(), discardedCounter.get(), numHashCallsPerThread);
@@ -573,6 +571,8 @@ void EhDevice<EquihashType>::debugPrintHashes(const bool bIsBucketed)
         size_t bucketSize = bIsBucketed ? vCollisionCounters[bucketIdx] : EquihashType::NBucketSize;
         size_t bucketOffset = bucketIdx * EquihashType::NBucketSize * EquihashType::HashWords;
 
+        if (bucketIdx > 3 && bucketIdx < EquihashType::NBucketCount - 3)
+            continue;
         // correct size for the last bucket
         if (!bIsBucketed && (bucketIdx == EquihashType::NBucketCount - 1))
             bucketSize = EquihashType::NHashes - bucketIdx * EquihashType::NBucketSize;
