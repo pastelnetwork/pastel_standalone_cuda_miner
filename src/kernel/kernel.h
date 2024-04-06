@@ -10,7 +10,7 @@
 #include <local_types.h>
 #include <src/kernel/memutils.h>
 
-//#define USE_DEBUG_MODE
+#define USE_DEBUG_MODE
 #ifdef USE_DEBUG_MODE
 #define DEBUG_FN(func) func
 #else
