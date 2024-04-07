@@ -40,6 +40,7 @@ public:
     std::unique_ptr<uint32_t, CudaDeleter> hashes;               // NBucketCount * NBucketSize * HashWords
     std::unique_ptr<uint32_t, CudaDeleter> xoredHashes;          // NBucketCount * NBucketSize * HashWords
     std::unique_ptr<uint32_t, CudaDeleter> bucketHashIndices;    // NBucketCount * NBucketSize * (WK + 1)
+    std::unique_ptr<uint32_t, CudaDeleter> bucketHashCounters;       // NBucketCount * (WK + 1)
 
     std::unique_ptr<uint32_t, CudaDeleter> discardedCounter;     // 1
     std::unique_ptr<uint32_t, CudaDeleter> collisionPairs;       // NBucketCount * MaxCollisionsPerBucket
@@ -74,6 +75,5 @@ private:
     void debugPrintXoredHashes();
     void debugPrintCollisionPairs();
     void debugPrintBucketCounters(const uint32_t bucketIdx, const uint32_t *collisionCountersPtr);
-    void debugPrintCollisionCounter(const uint32_t bucketOffset, const uint32_t bucketEndIdx,
-        const uint32_t bucketIdx, const uint32_t collisionCount);
+
 };
