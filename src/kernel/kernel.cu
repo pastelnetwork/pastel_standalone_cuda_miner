@@ -260,9 +260,14 @@ __global__ void cudaKernel_processCollisions(
                 }
                 if (bAllZeroes)
                     continue; // skip if all zeroes
-                // define xored hash bucket based on the first NBucketIdxMask bits (starting from the bitOffset)
+                // define xored hash bucket based on the first NBucketIdxMask bits (starting from the CollisionBitLength)                
+                const uint32_t xoredGlobalOffset = wordOffset * numeric_limits<uint32_t>::digits + EquihashType::CollisionBitLength;
+                uint32_t xoredWordOffset = xoredGlobalOffset / numeric_limits<uint32_t>::digits;
+                if (xoredWordOffset >= EquihashType::HashWords - 1)
+                    xoredWordOffset = EquihashType::HashWords - 2;
+                const uint32_t xoredBitOffset = xoredGlobalBitOffset - xoredWordOffset * numeric_limits<uint32_t>::digits;
                 const uint32_t xoredBucketIdx = 
-                    (static_cast<uint32_t>(((static_cast<uint64_t>(xoredHash[1]) << 32) | xoredHash[0]) >> EquihashType::CollisionBitLength))
+                    (static_cast<uint32_t>(((static_cast<uint64_t>(xoredHash[xoredWordOffset + 1]) << 32) | xoredHash[xoredWordOffset]) >> xoredBitOffset))
                     & EquihashType::NBucketIdxMask;
                 uint32_t xoredHashIdxInBucket = 0;
                 if (!atomicCheckAndIncrement(&bucketHashCounters[xoredBucketIdx], EquihashType::NBucketSize, &xoredHashIdxInBucket))
@@ -561,6 +566,7 @@ void EhDevice<EquihashType>::debugPrintHashes(const bool bIsBucketed)
     uint32_t nDiscarded = 0;
     copyToHost(&nDiscarded, discardedCounter.get(), sizeof(uint32_t));
     cout << "Discarded: " << dec << nDiscarded << endl;
+    cudaMemset(discardedCounter.get(), 0, sizeof(uint32_t));
 }
 
 template<typename EquihashType>
