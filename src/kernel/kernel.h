@@ -61,7 +61,7 @@ public:
     void copySolutionsToHost(std::vector<typename EquihashType::solution_type>& vHostSolutions);
 
     static inline constexpr uint32_t ThreadsPerBlock = 256;
-    static inline constexpr uint32_t MaxCollisionsPerBucket = (EquihashType::WK + 1) * EquihashType::NBucketSize; // 10 * 65535 = 655350
+    static inline constexpr uint32_t MaxCollisionsPerBucket = 50'000;
     static inline constexpr uint32_t MaxSolutions = 10000;
 
 private:
