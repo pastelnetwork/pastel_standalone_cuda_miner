@@ -46,7 +46,6 @@ public:
     std::unique_ptr<uint32_t, CudaDeleter> collisionPairs;       // NBucketCount * MaxCollisionsPerBucket
     // Accumulated collision pair offsets for each bucket
     v_uint32 vCollisionPairsOffsets;                             // NBucketCount
-    v_uint32 vPrevCollisionPairsOffsets;                         // NBucketCount
     std::unique_ptr<uint32_t, CudaDeleter> collisionOffsets;     // NBucketCount * (WK + 1)
     std::unique_ptr<uint32_t, CudaDeleter> collisionCounters;    // NBucketCount * (WK + 1)
     v_uint32 vCollisionCounters;                                 // NBucketCount
