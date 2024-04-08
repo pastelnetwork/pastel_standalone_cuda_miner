@@ -40,14 +40,14 @@ public:
     std::unique_ptr<uint32_t, CudaDeleter> hashes;               // NBucketCount * NBucketSize * HashWords
     std::unique_ptr<uint32_t, CudaDeleter> xoredHashes;          // NBucketCount * NBucketSize * HashWords
     std::unique_ptr<uint32_t, CudaDeleter> bucketHashIndices;    // NBucketCount * NBucketSize * (WK + 1)
-    std::unique_ptr<uint32_t, CudaDeleter> bucketHashCounters;       // NBucketCount * (WK + 1)
+    std::unique_ptr<uint32_t, CudaDeleter> bucketHashCounters;   // NBucketCount * (WK + 1)
 
     std::unique_ptr<uint32_t, CudaDeleter> discardedCounter;     // 1
     std::unique_ptr<uint32_t, CudaDeleter> collisionPairs;       // NBucketCount * MaxCollisionsPerBucket
     // Accumulated collision pair offsets for each bucket
     v_uint32 vCollisionPairsOffsets;                             // NBucketCount
     v_uint32 vPrevCollisionPairsOffsets;                         // NBucketCount
-    std::unique_ptr<uint32_t, CudaDeleter> collisionPairOffsets; // NBucketCount
+    std::unique_ptr<uint32_t, CudaDeleter> collisionOffsets;     // NBucketCount * (WK + 1)
     std::unique_ptr<uint32_t, CudaDeleter> collisionCounters;    // NBucketCount * (WK + 1)
     v_uint32 vCollisionCounters;                                 // NBucketCount
 
@@ -66,7 +66,6 @@ public:
     static inline constexpr uint32_t MaxSolutions = 10000;
 
 private:
-    void rebucketHashes();
     void generateInitialHashes();
     void processCollisions();
     uint32_t findSolutions();
