@@ -417,67 +417,62 @@ __global__ void cudaKernel_findSolutions(
     const auto curCollisionCountersPtr = collisionCounters + EquihashType::WK * EquihashType::NBucketCount;
     const auto curCollisionOffsetsPtr = collisionOffsets + EquihashType::WK * EquihashType::NBucketCount;
  
-    for (uint32_t idxLeft = startIdx + 1; idxLeft < endIdx; ++idxLeft)
+    for (uint32_t idx = startIdx; idx < endIdx; ++idx)
     {
-        const uint32_t hashIdxLeft = idxLeft * EquihashType::HashWords;        
-        const uint32_t lastHashWordLeft = hashes[hashIdxLeft + EquihashType::HashWords - 1];
+        const uint32_t hashIdx = idx * EquihashType::HashWords;        
+        const uint32_t lastHashWord = hashes[hashIdx + EquihashType::HashWords - 1];
 
-        for (uint32_t idxRight = startIdx; idxRight < idxLeft; ++idxRight)
+        if (lastHashWord != 0)
+            continue;
+
+        // found solution
+        printf("[%u] Found solution [%u-%u] \n", bucketIdx, idx);
+        auto bucketHashIndicesBasePtr = bucketHashIndices + EquihashType::WK * EquihashType::NHashStorageCount;
+
+        indices[0] = idx;
+        uint32_t numIndices = 1;
+        uint32_t numIndicesNew = 0;
+
+        for (int round = EquihashType::WK - 1; round >= 0; --round)
         {
-            const uint32_t lastHashWordRight = hashes[idxRight * EquihashType::HashWords + EquihashType::HashWords - 1];
-            if (lastHashWordRight != lastHashWordLeft)
-                continue;
-            
-            // found solution
-            printf("[%u] Found solution [%u-%u] \n", bucketIdx, idxLeft, idxRight);
-            auto bucketHashIndicesBasePtr = bucketHashIndices + EquihashType::WK * EquihashType::NHashStorageCount;
+            const auto bucketHashIndicesRoundPtr = bucketHashIndices + round * EquihashType::NHashStorageCount;
+            const auto curCollisionCountersRoundPtr = collisionCounters + round * EquihashType::NBucketCount;
+            const auto curCollisionOffsetsRoundPtr = collisionOffsets + round * EquihashType::NBucketCount;
 
-            indices[0] = idxLeft;
-            indices[1] = idxRight;
-            uint32_t numIndices = 2;
-            uint32_t numIndicesNew = 0;
-
-            for (int round = EquihashType::WK - 1; round >= 0; --round)
+            for (uint32_t index = 0; index < numIndices; ++index)
             {
-                const auto bucketHashIndicesRoundPtr = bucketHashIndices + round * EquihashType::NHashStorageCount;
-                const auto curCollisionCountersRoundPtr = collisionCounters + round * EquihashType::NBucketCount;
-                const auto curCollisionOffsetsRoundPtr = collisionOffsets + round * EquihashType::NBucketCount;
+                const uint32_t curIndex = pIndices[index];
+                const uint32_t curBucketIdx = curIndex / EquihashType::NBucketSize;
+                const uint32_t curIdx = curIndex % EquihashType::NBucketSize;
+                const auto bucketHashIndicesPtr = bucketHashIndicesRoundPtr + curBucketIdx * EquihashType::NBucketSize;
+                // pointer to the collision pair format: [BBBB BBBB BBBB BBBB] [NNNN NNNN NNNN NNNN]
+                // B = bucket index, N = collision pair index
+                const auto ptr = bucketHashIndicesPtr[curIdx];
+                const auto collisionPairIndex = ptr & 0xFFFF;
+                const auto collisionPairBucketIdx = ptr >> 16;
 
-                for (uint32_t index = 0; index < numIndices; ++index)
-                {
-                    const uint32_t curIndex = pIndices[index];
-                    const uint32_t curBucketIdx = curIndex / EquihashType::NBucketSize;
-                    const uint32_t curIdx = curIndex % EquihashType::NBucketSize;
-                    const auto bucketHashIndicesPtr = bucketHashIndicesRoundPtr + curBucketIdx * EquihashType::NBucketSize;
-                    // pointer to the collision pair format: [BBBB BBBB BBBB BBBB] [NNNN NNNN NNNN NNNN]
-                    // B = bucket index, N = collision pair index
-                    const auto ptr = bucketHashIndicesPtr[curIdx];
-                    const auto collisionPairIndex = ptr & 0xFFFF;
-                    const auto collisionPairBucketIdx = ptr >> 16;
+                const auto collisionPairsPtr = collisionPairs + 
+                    collisionPairBucketIdx * maxCollisionsPerBucket;
+                const uint32_t collisionPairInfo = collisionPairsPtr[collisionPairIndex];
+                uint32_t pairIdx1 = collisionPairInfo >> 16;
+                uint32_t pairIdx2 = collisionPairInfo & 0xFFFF;
 
-                    const auto collisionPairsPtr = collisionPairs + 
-                        collisionPairBucketIdx * maxCollisionsPerBucket;
-                    const uint32_t collisionPairInfo = collisionPairsPtr[collisionPairIndex];
-                    uint32_t pairIdx1 = collisionPairInfo >> 16;
-                    uint32_t pairIdx2 = collisionPairInfo & 0xFFFF;
-
-                    pIndicesNew[numIndicesNew++] = collisionPairBucketIdx * EquihashType::NBucketSize + pairIdx1;
-                    pIndicesNew[numIndicesNew++] = collisionPairBucketIdx * EquihashType::NBucketSize + pairIdx2;
-                }
-                uint32_t *pIndicesTemp = pIndices;
-                pIndices = pIndicesNew;
-                pIndicesNew = pIndicesTemp;
-                numIndices = numIndicesNew;
-                numIndicesNew = 0;
+                pIndicesNew[numIndicesNew++] = collisionPairBucketIdx * EquihashType::NBucketSize + pairIdx1;
+                pIndicesNew[numIndicesNew++] = collisionPairBucketIdx * EquihashType::NBucketSize + pairIdx2;
             }
-
-            uint32_t solutionIndex = 0;
-            if (atomicCheckAndIncrement(solutionCount, maxSolutionCount, &solutionIndex))
-            {
-                for (uint32_t i = 0; i < EquihashType::ProofSize; ++i)
-                    solutions[solutionIndex].indices[i] = indices[i];
-            }    
+            uint32_t *pIndicesTemp = pIndices;
+            pIndices = pIndicesNew;
+            pIndicesNew = pIndicesTemp;
+            numIndices = numIndicesNew;
+            numIndicesNew = 0;
         }
+
+        uint32_t solutionIndex = 0;
+        if (atomicCheckAndIncrement(solutionCount, maxSolutionCount, &solutionIndex))
+        {
+            for (uint32_t i = 0; i < EquihashType::ProofSize; ++i)
+                solutions[solutionIndex].indices[i] = indices[i];
+        }    
     }
 }
 
