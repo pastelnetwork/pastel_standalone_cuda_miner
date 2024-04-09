@@ -10,7 +10,7 @@
 #include <local_types.h>
 #include <src/kernel/memutils.h>
 
-#define USE_DEBUG_MODE
+//#define USE_DEBUG_MODE
 #ifdef USE_DEBUG_MODE
 #define DEBUG_FN(func) func
 #else
@@ -61,7 +61,7 @@ public:
     void copySolutionsToHost(std::vector<typename EquihashType::solution_type>& vHostSolutions);
 
     static inline constexpr uint32_t ThreadsPerBlock = 256;
-    static inline constexpr uint32_t MaxCollisionsPerBucket = 50'000;
+    static inline constexpr uint32_t MaxCollisionsPerBucket = 15'000;
     static inline constexpr uint32_t MaxSolutions = 10000;
 
 private:
@@ -69,8 +69,7 @@ private:
     void processCollisions();
     uint32_t findSolutions();
 
-    void debugPrintHashes(const bool bIsBucketed);
-    void debugPrintXoredHashes();
+    void debugPrintHashes();
     void debugPrintCollisionPairs();
     void debugPrintBucketCounters(const uint32_t bucketIdx, const uint32_t *collisionCountersPtr);
 
