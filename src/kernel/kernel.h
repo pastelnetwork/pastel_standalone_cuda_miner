@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <vector>
 #include <memory>
+#include <iostream>
+#include <fstream>
 
 #include <blake2b.h>
 #include <local_types.h>
@@ -15,6 +17,13 @@
 #define DEBUG_FN(func) func
 #else
 #define DEBUG_FN(func)
+#endif
+
+#define DBG_EQUI_WRITE
+#ifdef DBG_EQUI_WRITE
+#define DBG_EQUI_WRITE_FN(func) func
+#else
+#define DBG_EQUI_WRITE_FN(func)
 #endif
 
 #define EQUI_TIMER
@@ -62,7 +71,7 @@ public:
 
     static inline constexpr uint32_t ThreadsPerBlock = 256;
     static inline constexpr uint32_t MaxCollisionsPerBucket = 15'000;
-    static inline constexpr uint32_t MaxSolutions = 10000;
+    static inline constexpr uint32_t MaxSolutions = 10;
 
 private:
     void generateInitialHashes();
@@ -73,4 +82,8 @@ private:
     void debugPrintCollisionPairs();
     void debugPrintBucketCounters(const uint32_t bucketIdx, const uint32_t *collisionCountersPtr);
 
+    void debugWriteHashes();
+    void debugWriteCollisionPairs();
+    void debugWriteSolutions();
+    std::ofstream m_dbgFile;
 };
