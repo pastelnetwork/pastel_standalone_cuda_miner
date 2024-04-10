@@ -44,6 +44,9 @@ uint32_t miningLoop(const blake2b_state& initialState, uint32_t &nExtraNonce2, c
         if (nSolutionCount > 0)
             devStore.copySolutionsToHost(vHostSolutions);
 
+        DBG_EQUI_WRITE_FN(devStore.debugWriteSolutions(vHostSolutions));
+        devStore.debugTraceSolution(1000);
+
         // check solutions
         v_uint8 solutionMinimal;
         v_uint32 vSolution;

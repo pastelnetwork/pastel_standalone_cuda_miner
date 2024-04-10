@@ -46,9 +46,9 @@ public:
     ~EhDevice() {}
 
     std::unique_ptr<blake2b_state, CudaDeleter> initialState;
-    std::unique_ptr<uint32_t, CudaDeleter> hashes;               // NBucketCount * NBucketSize * HashWords
-    std::unique_ptr<uint32_t, CudaDeleter> xoredHashes;          // NBucketCount * NBucketSize * HashWords
-    std::unique_ptr<uint32_t, CudaDeleter> bucketHashIndices;    // NBucketCount * NBucketSize * (WK + 1)
+    std::unique_ptr<uint32_t, CudaDeleter> hashes;               // NBucketCount * NBucketSizeExtra * HashWords
+    std::unique_ptr<uint32_t, CudaDeleter> xoredHashes;          // NBucketCount * NBucketSizeExtra * HashWords
+    std::unique_ptr<uint32_t, CudaDeleter> bucketHashIndices;    // NBucketCount * NBucketSizeExtra * (WK + 1)
     std::unique_ptr<uint32_t, CudaDeleter> bucketHashCounters;   // NBucketCount * (WK + 1)
 
     std::unique_ptr<uint32_t, CudaDeleter> discardedCounter;     // 1
@@ -68,6 +68,8 @@ public:
     uint32_t solver();
 
     void copySolutionsToHost(std::vector<typename EquihashType::solution_type>& vHostSolutions);
+    void debugWriteSolutions(const std::vector<typename EquihashType::solution_type>& vHostSolutions);
+    void debugTraceSolution(const uint32_t bucketIdx);
 
     static inline constexpr uint32_t ThreadsPerBlock = 256;
     static inline constexpr uint32_t MaxCollisionsPerBucket = 15'000;
@@ -84,6 +86,6 @@ private:
 
     void debugWriteHashes();
     void debugWriteCollisionPairs();
-    void debugWriteSolutions();
+    void debugWriteBucketIndices();
     std::ofstream m_dbgFile;
 };

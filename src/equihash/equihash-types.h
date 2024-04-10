@@ -77,14 +77,15 @@ public:
     // the total number of hashes words required for the equihash algorithm
     static inline constexpr uint32_t NHashWords = NHashes * HashWords; // 14'680'064
     static inline constexpr uint32_t NBucketCount = 2'048;
-    static inline constexpr uint32_t NExtraHashesPerBucket = 116;
-    static inline constexpr uint32_t NBucketSize = ((NHashes + NBucketCount - 1) / NBucketCount) + NExtraHashesPerBucket; // 1'124
+    static inline constexpr uint32_t NExtraHashesPerBucket = 126;
+    static inline constexpr uint32_t NBucketSize = (NHashes + NBucketCount - 1) / NBucketCount; // 1'024
+    static inline constexpr uint32_t NBucketSizeExtra = NBucketSize + NExtraHashesPerBucket; // 1'150
     static inline constexpr uint32_t NBucketIdxBits = COUNT_BITS(NBucketCount - 1); // 11
     static inline constexpr uint32_t NBucketIdxMask = NBucketCount - 1; // 2'047
     static inline constexpr uint32_t NCollisionIndexBits = 11;
     static inline constexpr uint32_t NCollisionIndexBitMask = (1 << NCollisionIndexBits) - 1; // 2'047
-    static inline constexpr uint32_t NHashStorageCount = NBucketCount * NBucketSize; // 2'048 * 1'140 = 2'330'720 
-    static inline constexpr uint32_t NHashStorageWords = NBucketCount * NBucketSize * HashWords; // 2'330'720 * 7 = 16'343'040
+    static inline constexpr uint32_t NHashStorageCount = NBucketCount * NBucketSize; // 2'048 * 1'150 = 2'355'200
+    static inline constexpr uint32_t NHashStorageWords = NBucketCount * NBucketSize * HashWords; // 2'330'200 * 7 = 16'486'400
 
     using solution_type = struct
     {
