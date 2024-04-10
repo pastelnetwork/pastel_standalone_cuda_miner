@@ -47,7 +47,7 @@ public:
     // Accumulated collision pair offsets for each bucket
     v_uint32 vCollisionPairsOffsets;                             // NBucketCount
     std::unique_ptr<uint32_t, CudaDeleter> collisionOffsets;     // NBucketCount * (WK + 1)
-    std::unique_ptr<uint32_t, CudaDeleter> collisionCounters;    // NBucketCount * (WK + 1)
+    std::unique_ptr<uint32_t, CudaDeleter> collisionCounters;    // NBucketCount
     v_uint32 vCollisionCounters;                                 // NBucketCount
 
     std::unique_ptr<typename EquihashType::solution_type, CudaDeleter> solutions; // MAXSOLUTIONS
