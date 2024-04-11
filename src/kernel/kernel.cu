@@ -141,7 +141,7 @@ __global__ void cudaKernel_generateInitialHashes(const blake2b_state* state, uin
             const uint16_t bucketIdx = (static_cast<uint16_t>(hash[hashOffset + 1]) << 8 | hash[hashOffset]) & EquihashType::NBucketIdxMask;
             
             uint32_t hashIdxInBucket = 0;
-            if (!atomicCheckAndIncrement(&bucketHashCounters[bucketIdx], EquihashType::NBucketSize, &hashIdxInBucket))
+            if (!atomicCheckAndIncrement(&bucketHashCounters[bucketIdx], EquihashType::NBucketSizeExtra, &hashIdxInBucket))
             {
                 atomicAdd(discardedCounter, 1);
                 continue;
@@ -216,7 +216,7 @@ void EhDevice<EquihashType>::debugWriteBucketIndices()
     {
         if (vBucketHashCounters[i] == 0)
             continue;
-        m_dbgFile << "Bucket #" << dec << i << " (" << vBucketHashCounters[i] << ") hash indices: " << endl;
+        m_dbgFile << strprintf("\nRound %u, Bucket #%u, %u hash indices: ", round, i, vBucketHashCounters[i]);
         for (size_t j = 0; j < vBucketHashCounters[i]; ++j)
         {
             const uint32_t bucketHashIdx = vBucketHashIndices[i * EquihashType::NBucketSizeExtra + j];
@@ -326,7 +326,7 @@ __global__ void cudaKernel_processCollisions(
                     (static_cast<uint32_t>(((static_cast<uint64_t>(xoredHash[xoredWordOffset + 1]) << 32) | xoredHash[xoredWordOffset]) >> xoredBitOffset))
                     & EquihashType::NBucketIdxMask;
                 uint32_t xoredHashIdxInBucket = 0;
-                if (!atomicCheckAndIncrement(&bucketHashCounters[xoredBucketIdx], EquihashType::NBucketSize, &xoredHashIdxInBucket))
+                if (!atomicCheckAndIncrement(&bucketHashCounters[xoredBucketIdx], EquihashType::NBucketSizeExtra, &xoredHashIdxInBucket))
                 {
                     atomicAdd(discardedCounter, 1);
                     continue; // skip if the bucket is full
@@ -386,9 +386,6 @@ void EhDevice<EquihashType>::processCollisions()
     dim3 gridDim((EquihashType::NBucketCount + ThreadsPerBlock - 1) / ThreadsPerBlock);
     dim3 blockDim(ThreadsPerBlock);
 
-//    dim3 gridDim(10);
-//    dim3 blockDim(1);
-
     try {
         cudaMemset(collisionCounters.get(), 0, EquihashType::NBucketCount * sizeof(uint32_t));
 
@@ -398,7 +395,7 @@ void EhDevice<EquihashType>::processCollisions()
                     bucketHashCounters.get() + round * EquihashType::NBucketCount,
                     bucketHashCounters.get() + (round + 1) * EquihashType::NBucketCount,
                     collisionPairs.get(),
-                    collisionOffsets.get() + ((round > 0) ? (round - 1) * EquihashType::NBucketCount : 0), 
+                    collisionOffsets.get() + round * EquihashType::NBucketCount, 
                     collisionCounters.get(),
                     discardedCounter.get(), MaxCollisionsPerBucket,
                     wordOffset, collisionBitMask,
@@ -420,7 +417,7 @@ void EhDevice<EquihashType>::processCollisions()
         for (uint32_t bucketIdx = 0; bucketIdx < EquihashType::NBucketCount; ++bucketIdx)
             vCollisionPairsOffsets[bucketIdx] += vCollisionCounters[bucketIdx];
         
-        copyToDevice(collisionOffsets.get() + round * EquihashType::NBucketCount, vCollisionPairsOffsets.data(),
+        copyToDevice(collisionOffsets.get() + (round + 1) * EquihashType::NBucketCount, vCollisionPairsOffsets.data(),
             EquihashType::NBucketCount * sizeof(uint32_t));
 
     } catch (const exception& e)
@@ -543,7 +540,7 @@ uint32_t EhDevice<EquihashType>::findSolutions()
 }
 
 template<typename EquihashType>
-void EhDevice<EquihashType>::debugWriteHashes()
+void EhDevice<EquihashType>::debugWriteHashes(const bool bInitialHashes)
 {
     if (!m_dbgFile.is_open())
     {
@@ -554,8 +551,13 @@ void EhDevice<EquihashType>::debugWriteHashes()
 
     m_dbgFile << "------------------------------------------------------------\n";
     v_uint32 vBucketHashCounters(EquihashType::NBucketCount, 0);
-    copyToHost(vBucketHashCounters.data(), bucketHashCounters.get() + round * EquihashType::NBucketCount,
+    copyToHost(vBucketHashCounters.data(), bucketHashCounters.get() + 
+        (round + (bInitialHashes ? 0 : 1)) * EquihashType::NBucketCount,
         EquihashType::NBucketCount * sizeof(uint32_t));
+
+    v_uint32 vHostHashes;
+    vHostHashes.resize(EquihashType::NHashStorageWords);
+    copyToHost(vHostHashes.data(), hashes.get(), EquihashType::NHashStorageWords * sizeof(uint32_t));
 
     uint32_t nDiscarded = 0;
     copyToHost(&nDiscarded, discardedCounter.get(), sizeof(uint32_t));
@@ -563,21 +565,17 @@ void EhDevice<EquihashType>::debugWriteHashes()
     v_uint32 hostHashes;
     string sLog;
     sLog.reserve(1024);
-    sLog = strprintf("\nHashes for round #%u (discarded - %u):\n", round, nDiscarded);
-    m_dbgFile << sLog;
+    m_dbgFile << strprintf("\nHashes for round #%u (discarded - %u):\n", round, nDiscarded);
 
     for (uint32_t bucketIdx = 0; bucketIdx < EquihashType::NBucketCount; ++bucketIdx)
     {
         size_t nBucketHashCount = vBucketHashCounters[bucketIdx];
         if (nBucketHashCount == 0)
             continue;
-        sLog = strprintf("Bucket #%u (%u) hashes: \n", bucketIdx, nBucketHashCount);            
+        sLog = strprintf("\nRound %u Bucket #%u, (%u) hashes: \n", round, bucketIdx, nBucketHashCount);            
         m_dbgFile << sLog;
 
-        hostHashes.resize(nBucketHashCount * EquihashType::HashWords);
-        copyToHost(hostHashes.data(), hashes.get() + bucketIdx * EquihashType::NBucketSize * EquihashType::HashWords,
-        nBucketHashCount * EquihashType::HashWords * sizeof(uint32_t));
-
+        const uint32_t bucketHashStorageIdx = bucketIdx * EquihashType::NBucketSizeExtra;
         size_t hashNo = 0;
         for (uint32_t i = 0; i < nBucketHashCount; ++i)
         {
@@ -585,10 +583,10 @@ void EhDevice<EquihashType>::debugWriteHashes()
             bool bAllZeroes = true;
             for (size_t j = 0; j < EquihashType::HashWords; ++j)
             {
-                const uint32_t hashInputIdx = i * EquihashType::HashWords + j;
-                if (hostHashes[hashInputIdx])
+                const uint32_t hashInputIdx = (bucketHashStorageIdx + i) * EquihashType::HashWords + j;
+                if (vHostHashes[hashInputIdx])
                     bAllZeroes = false;
-                sLog += strprintf("%08x ", hostHashes[hashInputIdx]);
+                sLog += strprintf("%08x ", vHostHashes[hashInputIdx]);
             }
             if (bAllZeroes)
                 sLog += " (all zeroes)";
@@ -600,16 +598,21 @@ void EhDevice<EquihashType>::debugWriteHashes()
 }
 
 template<typename EquihashType>
-void EhDevice<EquihashType>::debugPrintHashes()
+void EhDevice<EquihashType>::debugPrintHashes(const bool bInitialHashes)
 {
     v_uint32 vBucketHashCounters(EquihashType::NBucketCount, 0);
-    copyToHost(vBucketHashCounters.data(), bucketHashCounters.get() + round * EquihashType::NBucketCount,
+    copyToHost(vBucketHashCounters.data(), bucketHashCounters.get() + 
+        (round + (bInitialHashes ? 0 : 1)) * EquihashType::NBucketCount,
         EquihashType::NBucketCount * sizeof(uint32_t));
 
     uint32_t nDiscarded = 0;
     copyToHost(&nDiscarded, discardedCounter.get(), sizeof(uint32_t));
     cout << "Discarded: " << dec << nDiscarded << endl;
 
+    v_uint32 vHostHashes;
+    vHostHashes.resize(EquihashType::NHashStorageWords);
+    copyToHost(vHostHashes.data(), hashes.get(), EquihashType::NHashStorageWords * sizeof(uint32_t));
+    
     v_uint32 hostHashes;
     string sLog;
     sLog.reserve(1024);
@@ -622,30 +625,25 @@ void EhDevice<EquihashType>::debugPrintHashes()
         size_t nBucketHashCount = vBucketHashCounters[bucketIdx];
         if (nBucketHashCount == 0)
             continue;
-        sLog = strprintf("Bucket #%u (%u) hashes: \n", bucketIdx, nBucketHashCount);            
-        cout << sLog;
+        cout << strprintf("\nRound %u Bucket #%u, (%u) hashes: \n", round, bucketIdx, nBucketHashCount);
 
-        hostHashes.resize(nBucketHashCount * EquihashType::HashWords);
-        copyToHost(hostHashes.data(), hashes.get() + bucketIdx * EquihashType::NBucketSize * EquihashType::HashWords,
-        nBucketHashCount * EquihashType::HashWords * sizeof(uint32_t));
-
+        const uint32_t bucketStorageIdx = bucketIdx * EquihashType::NBucketSizeExtra;
         size_t hashNo = 0;
         for (uint32_t i = 0; i < nBucketHashCount; ++i)
         {
-            if (hashNo > 10 && (hashNo % 100 != 0))
+            if (hashNo > 5 && (hashNo < nBucketHashCount - 5))
             {
                 ++hashNo;
                 continue;
             }
             sLog = strprintf("Hash %u (%u): ", hashNo, bucketIdx * EquihashType::NBucketSize + i);
-            cout << sLog;
             bool bAllZeroes = true;
             for (size_t j = 0; j < EquihashType::HashWords; ++j)
             {
-                const uint32_t hashInputIdx = i * EquihashType::HashWords + j;
-                if (hostHashes[hashInputIdx])
+                const uint32_t hashInputIdx = (bucketStorageIdx + i) * EquihashType::HashWords + j;
+                if (vHostHashes[hashInputIdx])
                     bAllZeroes = false;
-                sLog += strprintf("%08x ", hostHashes[hashInputIdx]);
+                sLog += strprintf("%08x ", vHostHashes[hashInputIdx]);
             }
             if (bAllZeroes)
                 sLog += " (all zeroes)";
@@ -663,10 +661,14 @@ void EhDevice<EquihashType>::debugWriteCollisionPairs()
     v_uint32 vCollisionPairsOffsets(EquihashType::NBucketCount, 0);
     copyToHost(vBucketCollisionCounts.data(),
         collisionCounters.get(), EquihashType::NBucketCount * sizeof(uint32_t));
-    if (round > 0)
-        copyToHost(vCollisionPairsOffsets.data(),
-            collisionOffsets.get() + ((round > 0) ? (round - 1) * EquihashType::NBucketCount : 0),
-            vCollisionPairsOffsets.size() * sizeof(uint32_t));
+
+    copyToHost(vCollisionPairsOffsets.data(),
+        collisionOffsets.get() + round * EquihashType::NBucketCount,
+        vCollisionPairsOffsets.size() * sizeof(uint32_t));
+
+    v_uint32 vCollisionPairs(EquihashType::NBucketCount * MaxCollisionsPerBucket);
+    copyToHost(vCollisionPairs.data(), 
+        collisionPairs.get(), vCollisionPairs.size() * sizeof(uint32_t));
 
     constexpr uint32_t COLLISIONS_PER_LINE = 10;
     m_dbgFile << "------------------------------------------------------------\n";
@@ -676,12 +678,9 @@ void EhDevice<EquihashType>::debugWriteCollisionPairs()
         size_t nBucketCollisionCount = vBucketCollisionCounts[bucketIdx];
         if (nBucketCollisionCount == 0)
             continue;
-        m_dbgFile << "Bucket #" << dec << bucketIdx << " (" << nBucketCollisionCount << ") collision pairs: " << endl;
-
-        v_uint32 hostCollisionPairs(nBucketCollisionCount);
-        copyToHost(hostCollisionPairs.data(), 
-            collisionPairs.get() + bucketIdx * MaxCollisionsPerBucket + vCollisionPairsOffsets[bucketIdx], 
-            nBucketCollisionCount * sizeof(uint32_t));
+        m_dbgFile << strprintf("\nRound %u, Bucket #%u, collision pairs %u (bucket offsets: %u...%u), collision bucket origin: %u:\n",
+            round, bucketIdx, nBucketCollisionCount, vCollisionPairsOffsets[bucketIdx], vCollisionPairsOffsets[bucketIdx] + nBucketCollisionCount,
+            bucketIdx * MaxCollisionsPerBucket);
 
         uint32_t nPairNo = 0;
         for (uint32_t i = 0; i < nBucketCollisionCount; ++i)
@@ -689,7 +688,8 @@ void EhDevice<EquihashType>::debugWriteCollisionPairs()
             ++nPairNo;
             if (nPairNo > 30)
                 break;
-            const uint32_t collisionPairInfo = hostCollisionPairs[i];
+            const uint32_t collisionPairInfo = vCollisionPairs[bucketIdx * MaxCollisionsPerBucket +
+                vCollisionPairsOffsets[bucketIdx] + i];
             const uint32_t idxLeft = collisionPairInfo >> 16;
             const uint32_t idxRight = collisionPairInfo & 0xFFFF;
             if (i % COLLISIONS_PER_LINE == 0)
@@ -721,11 +721,11 @@ void EhDevice<EquihashType>::debugPrintCollisionPairs()
     v_uint32 vBucketCollisionCounts(EquihashType::NBucketCount, 0);
     v_uint32 vCollisionPairsOffsets(EquihashType::NBucketCount, 0);
     copyToHost(vBucketCollisionCounts.data(),
-        collisionCounters.get() + round * EquihashType::NBucketCount,
+        collisionCounters.get(),
         vBucketCollisionCounts.size() * sizeof(uint32_t));
     if (round > 0)
         copyToHost(vCollisionPairsOffsets.data(),
-            collisionOffsets.get() + ((round > 0) ? (round - 1) * EquihashType::NBucketCount : 0),
+            collisionOffsets.get() + round * EquihashType::NBucketCount,
             vCollisionPairsOffsets.size() * sizeof(uint32_t));
 
     constexpr uint32_t COLLISIONS_PER_LINE = 10;
@@ -737,7 +737,7 @@ void EhDevice<EquihashType>::debugPrintCollisionPairs()
         size_t nBucketCollisionCount = vBucketCollisionCounts[bucketIdx];
         if (nBucketCollisionCount == 0)
             continue;
-        cout << "Bucket #" << dec << bucketIdx << " (" << nBucketCollisionCount << ") collision pairs: " << endl;
+        cout << strprintf("\nRound %u, Bucket #%u, %u collision pairs:\n", round, bucketIdx, nBucketCollisionCount);  
 
         v_uint32 hostCollisionPairs(nBucketCollisionCount);
         copyToHost(hostCollisionPairs.data(), 
@@ -906,8 +906,8 @@ uint32_t EhDevice<EquihashType>::solver()
     EQUI_TIMER_START;
     generateInitialHashes();
     EQUI_TIMER_STOP("Initial hash generation");
-    DEBUG_FN(debugPrintHashes());
-    DBG_EQUI_WRITE_FN(debugWriteHashes());
+    DEBUG_FN(debugPrintHashes(true));
+    DBG_EQUI_WRITE_FN(debugWriteHashes(true));
     DBG_EQUI_WRITE_FN(debugWriteBucketIndices());
 
     // Perform K rounds of collision detection and XORing
@@ -921,8 +921,8 @@ uint32_t EhDevice<EquihashType>::solver()
         DBG_EQUI_WRITE_FN(debugWriteCollisionPairs());
         // Swap the hash pointers for the next round
         swap(hashes, xoredHashes);
-        DEBUG_FN(debugPrintHashes());
-        DBG_EQUI_WRITE_FN(debugWriteHashes());
+        DEBUG_FN(debugPrintHashes(false));
+        DBG_EQUI_WRITE_FN(debugWriteHashes(false));
 
         ++round;
         cout << "Round #" << dec << round << " completed" << endl;

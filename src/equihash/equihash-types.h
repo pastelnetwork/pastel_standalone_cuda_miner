@@ -84,8 +84,8 @@ public:
     static inline constexpr uint32_t NBucketIdxMask = NBucketCount - 1; // 2'047
     static inline constexpr uint32_t NCollisionIndexBits = 11;
     static inline constexpr uint32_t NCollisionIndexBitMask = (1 << NCollisionIndexBits) - 1; // 2'047
-    static inline constexpr uint32_t NHashStorageCount = NBucketCount * NBucketSize; // 2'048 * 1'150 = 2'355'200
-    static inline constexpr uint32_t NHashStorageWords = NBucketCount * NBucketSize * HashWords; // 2'330'200 * 7 = 16'486'400
+    static inline constexpr uint32_t NHashStorageCount = NBucketCount * NBucketSizeExtra; // 2'048 * 1'150 = 2'355'200
+    static inline constexpr uint32_t NHashStorageWords = NBucketCount * NBucketSizeExtra * HashWords; // 2'330'200 * 7 = 16'486'400
 
     using solution_type = struct
     {

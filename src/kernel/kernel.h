@@ -80,11 +80,11 @@ private:
     void processCollisions();
     uint32_t findSolutions();
 
-    void debugPrintHashes();
+    void debugPrintHashes(const bool bInitialHashes);
     void debugPrintCollisionPairs();
     void debugPrintBucketCounters(const uint32_t bucketIdx, const uint32_t *collisionCountersPtr);
 
-    void debugWriteHashes();
+    void debugWriteHashes(const bool bInitialHashes);
     void debugWriteCollisionPairs();
     void debugWriteBucketIndices();
     std::ofstream m_dbgFile;
