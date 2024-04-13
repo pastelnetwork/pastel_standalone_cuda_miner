@@ -14,7 +14,7 @@ static constexpr signed char p_util_hexdigit[] =
 { -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
   -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
   -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-  0,1,2,3,4,5,6,7,8,9,-1,-1,-1,-1,-1,-1,
+   0,1,2,3,4,5,6,7,8,9,-1,-1,-1,-1,-1,-1,
   -1,0xa,0xb,0xc,0xd,0xe,0xf,-1,-1,-1,-1,-1,-1,-1,-1,-1,
   -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
   -1,0xa,0xb,0xc,0xd,0xe,0xf,-1,-1,-1,-1,-1,-1,-1,-1,-1,
@@ -47,9 +47,11 @@ v_uint8 ParseHex(const char* psz)
 {
     // convert hex dump to vector
     v_uint8 vch;
+    if (!psz)
+        return vch;
     const size_t nLength = psz ? strlen(psz) : 0;
     vch.reserve(nLength / 2);
-    while (psz)
+    while (*psz)
     {
         while (isspaceex(*psz))
             psz++;
