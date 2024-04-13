@@ -30,7 +30,7 @@ file(GLOB SRC_STRATUM   "src/stratum/*.cpp")
 file(GLOB SRC_KERNEL    "src/kernel/*.cu")
 file(GLOB SRC_MAIN      "src/main.cpp")
 
-file(GLOB SRC_GTEST     "src/gtest/*.cpp")
+file(GLOB SRC_GTEST     "src/gtest/*.c*")
 
 target_sources(pastel_miner
 	PRIVATE

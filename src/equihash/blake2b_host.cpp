@@ -77,23 +77,23 @@ static inline void store64(void *dst, uint64_t w)
 }
 
 
-void blake2b_init_host(blake2b_state *S, size_t outlen)
+bool blake2b_init_host(blake2b_state *state, size_t outlen)
 {
-    S->h[0] = blake2b_IV[0] ^ (0x01010000 | (outlen << 8));
-    S->h[1] = blake2b_IV[1];
-    S->h[2] = blake2b_IV[2];
-    S->h[3] = blake2b_IV[3];
-    S->h[4] = blake2b_IV[4];
-    S->h[5] = blake2b_IV[5];
-    S->h[6] = blake2b_IV[6];
-    S->h[7] = blake2b_IV[7];
-    S->t[0] = 0;
-    S->t[1] = 0;
-    S->f[0] = 0;
-    S->f[1] = 0;
-    S->buflen = 0;
-    S->outlen = outlen;
-    S->last_node = 0;
+    if (!state || !outlen || outlen > BLAKE2B_OUTBYTES)
+        return false;
+
+    state->h[0] = blake2b_IV[0] ^ (0x01010000 | static_cast<uint8_t>(outlen));
+    for (size_t i = 1; i < 8; ++i)
+        state->h[i] = blake2b_IV[i]; 
+
+    state->t[0] = 0;
+    state->t[1] = 0;
+    state->f[0] = 0;
+    state->f[1] = 0;
+    state->buflen = 0;
+    state->outlen = outlen;
+    state->last_node = 0;
+    return true;
 }
 
 static void blake2b_compress(blake2b_state *state, const uint8_t *block)
@@ -125,6 +125,12 @@ static void blake2b_compress(blake2b_state *state, const uint8_t *block)
         state->h[i] = state->h[i] ^ v[i] ^ v[i + 8];
 }
 
+static inline void blake2b_increment_counter(blake2b_state *state, const uint64_t inc)
+{
+    state->t[0] += inc;
+    state->t[1] += (state->t[0] < inc);
+}
+
 void blake2b_update_host(blake2b_state *state, const void *pin, size_t inlen)
 {
     const uint8_t *in = static_cast<const uint8_t *>(pin);
@@ -137,25 +143,20 @@ void blake2b_update_host(blake2b_state *state, const void *pin, size_t inlen)
     size_t fill = BLAKE2B_BLOCKBYTES - left;
     if (inlen > fill)
     {
+        state->buflen = 0;
         memcpy(state->buf + left, in, fill); // Fill the buffer
-        state->buflen += fill;
+        blake2b_increment_counter(state, BLAKE2B_BLOCKBYTES);
         blake2b_compress(state, state->buf); // Compress the full buffer
         in += fill;
         inlen -= fill;
-        state->buflen = 0;
-        state->t[0] += BLAKE2B_BLOCKBYTES;
-        if (state->t[0] < BLAKE2B_BLOCKBYTES)
-            state->t[1]++; // Overflow
 
         // Process remaining input data in BLAKE2B_BLOCKBYTES chunks
         while (inlen > BLAKE2B_BLOCKBYTES)
         {
+            blake2b_increment_counter(state, BLAKE2B_BLOCKBYTES);
             blake2b_compress(state, in);
             in += BLAKE2B_BLOCKBYTES;
             inlen -= BLAKE2B_BLOCKBYTES;
-            state->t[0] += BLAKE2B_BLOCKBYTES;
-            if (state->t[0] < BLAKE2B_BLOCKBYTES)
-                state->t[1]++; // Overflow
         }
     }
 
@@ -164,15 +165,44 @@ void blake2b_update_host(blake2b_state *state, const void *pin, size_t inlen)
     state->buflen += inlen;
 }
 
-void blake2b_final_host(blake2b_state *S, void *out, size_t outlen)
+static inline int blake2b_is_lastblock( const blake2b_state *S )
 {
-    S->t[0] += S->buflen;
-    S->t[1] += (S->t[0] < S->buflen);
+  return S->f[0] != 0;
+}
 
-    memset(S->buf + S->buflen, 0, BLAKE2B_BLOCKBYTES - S->buflen);
+static inline void blake2b_set_lastnode( blake2b_state *S )
+{
+  S->f[1] = (uint64_t)(-1);
+}
+
+static inline void blake2b_set_lastblock( blake2b_state *S )
+{
+  if( S->last_node )
+    blake2b_set_lastnode( S );
+
+  S->f[0] = (uint64_t)(-1);
+}
+
+bool blake2b_final_host(blake2b_state *S, void *out, size_t outlen)
+{
+    if (!out || outlen < S->outlen)
+        return false;
+
+    if (blake2b_is_lastblock(S))
+        return false;
+
+    blake2b_increment_counter(S, S->buflen);
+    blake2b_set_lastblock(S);
+    memset(S->buf + S->buflen, 0, BLAKE2B_BLOCKBYTES - S->buflen); // Padding
     blake2b_compress(S, S->buf);
 
-    memcpy(out, &S->h[0], outlen);
+    uint8_t buffer[BLAKE2B_OUTBYTES] = {0};
+    for (size_t i = 0; i < 8; ++i)
+        store64(buffer + sizeof(S->h[i]) * i, S->h[i]);
+
+    memcpy(out, buffer, S->outlen);
+    secure_zero_memory(buffer, sizeof(buffer));
+    return true;
 }
 
 bool blake2b_init_salt_personal_host(blake2b_state *state, 
@@ -181,7 +211,7 @@ bool blake2b_init_salt_personal_host(blake2b_state *state,
     const uint8_t* salt, const size_t nSaltLength,
     const uint8_t* personal, const size_t nPersonaLength)
 {
-    if (!state || outlen == 0 || outlen > BLAKE2B_OUTBYTES)
+    if (!state || !outlen || outlen > BLAKE2B_OUTBYTES)
         return false;
 
     if (key && nKeyLength > BLAKE2B_KEYBYTES)
@@ -194,13 +224,8 @@ bool blake2b_init_salt_personal_host(blake2b_state *state,
         return false;
 
     state->h[0] = blake2b_IV[0] ^ (0x01010000 | (nKeyLength << 8) | outlen);
-    state->h[1] = blake2b_IV[1];
-    state->h[2] = blake2b_IV[2];
-    state->h[3] = blake2b_IV[3];
-    state->h[4] = blake2b_IV[4];
-    state->h[5] = blake2b_IV[5];
-    state->h[6] = blake2b_IV[6];
-    state->h[7] = blake2b_IV[7];
+    for (size_t i = 1; i < 8; ++i)
+        state->h[i] = blake2b_IV[i]; 
 
     state->t[0] = 0;
     state->t[1] = 0;

@@ -123,13 +123,13 @@ __global__ void cudaKernel_generateInitialHashes(const blake2b_state* state, uin
     const uint32_t tid = threadIdx.x + blockIdx.x * blockDim.x;
     uint32_t hashInputIdx = tid * numHashCalls;
 
-    uint8_t hash[EquihashType::HashOutput];  
+    uint8_t hash[BLAKE2B_OUTBYTES];  
     uint32_t i = 0;
     while ((hashInputIdx < EquihashType::Base) && (i++ < numHashCalls))
     {
         blake2b_state localState = *state;
         blake2b_update_device(&localState, reinterpret_cast<const uint8_t*>(&hashInputIdx), sizeof(hashInputIdx));
-        blake2b_final_device(&localState, hash, EquihashType::HashOutput);
+        blake2b_final_device(&localState, hash, BLAKE2B_OUTBYTES);
 
         uint32_t curHashIdx = hashInputIdx * EquihashType::IndicesPerHashOutput;
         uint32_t hashOffset = 0;
@@ -284,6 +284,8 @@ __global__ void cudaKernel_processCollisions(
     const uint32_t startIdxStorage = bucketIdx * EquihashType::NBucketSizeExtra;
     const uint32_t hashCount = bucketHashCountersPrev[bucketIdx];
     uint32_t xoredHash[EquihashType::HashWords];
+    if (hashCount == 0)
+        return;
 
     bool processed[EquihashType::NBucketSizeExtra] = { false };
     uint32_t stackCapacity = 20;
@@ -893,7 +895,10 @@ void EhDevice<EquihashType>::debugTraceSolution(const uint32_t bucketIdx)
         for (uint32_t i = 0; i < EquihashType::ProofSize; ++i)
         {
             vSolution[i] = vBucketHashIndices[pIndices[i]];
-            m_dbgFile << strprintf("Index %u: %u -> %u\n", i, pIndices[i], vSolution[i]);
+            m_dbgFile << strprintf("Index %u: %u -> %u [hash %u-%u]\n", 
+                i, pIndices[i], 
+                vSolution[i], vSolution[i] / EquihashType::NBucketSize,
+                vSolution[i] % EquihashType::NBucketSize);
         }
 
         blake2b_state currState;
@@ -904,11 +909,12 @@ void EhDevice<EquihashType>::debugTraceSolution(const uint32_t bucketIdx)
         // check the solution
         v_uint8 solutionMinimal = GetMinimalFromIndices(vSolution, EquihashType::CollisionBitLength);
         if (!eh.IsValidSolution(sError, currState, solutionMinimal))
-            m_dbgFile << "\nInvalid solution:\n" << sError << endl;
+            m_dbgFile << endl << sError << endl;
         else
-            m_dbgFile << "\nValid solution\n";
+            m_dbgFile << endl << "Valid solution" << endl;
         string sHexSolution = HexStr(solutionMinimal);
-        m_dbgFile << "Solution: " << sHexSolution << endl;
+        m_dbgFile << "Solution(" << dec << solutionMinimal.size() << "):" 
+            << endl << sHexSolution << endl;
         break;
     }
 }

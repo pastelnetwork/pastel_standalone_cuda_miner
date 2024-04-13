@@ -44,10 +44,10 @@ bool EquihashSolver<N, K>::IsValidSolution(string &error, const blake2b_state& b
 
     vector<FullStepRow<Equihash<N, K>::FinalFullWidth>> X;
     X.reserve(Equihash<N, K>::ProofSize);
-    unsigned char tmpHash[Equihash<N, K>::HashOutput];
+    unsigned char tmpHash[BLAKE2B_OUTBYTES];
     for (eh_index i : GetIndicesFromMinimal(soln, Equihash<N, K>::CollisionBitLength))
     {
-        GenerateHash(base_state, i/Equihash<N, K>::IndicesPerHashOutput, tmpHash, Equihash<N, K>::HashOutput);
+        GenerateHash(base_state, i/Equihash<N, K>::IndicesPerHashOutput, tmpHash, BLAKE2B_OUTBYTES);
         X.emplace_back(tmpHash+((i % Equihash<N, K>::IndicesPerHashOutput) * N/8),
                        N/8, Equihash<N, K>::HashLength, Equihash<N, K>::CollisionBitLength, i);
     }

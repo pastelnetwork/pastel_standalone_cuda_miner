@@ -95,8 +95,6 @@ TEST(MinerTest, MiningLoop)
     // Additional assertions or checks can be added as needed
 }
 
-// Add more test cases as needed
-
 int main(int argc, char **argv)
 {
     InitGoogleTest(&argc, argv);
