@@ -573,6 +573,10 @@ void EhDevice<EquihashType>::debugWriteHashes(const bool bInitialHashes)
         (round + (bInitialHashes ? 0 : 1)) * EquihashType::NBucketCount,
         EquihashType::NBucketCount * sizeof(uint32_t));
 
+    v_uint32 vBucketHashIndices(EquihashType::NHashStorageCount, 0);
+    copyToHost(vBucketHashIndices.data(), bucketHashIndices.get() + (bInitialHashes ? 0 : (round + 1) * EquihashType::NHashStorageCount),
+        vBucketHashIndices.size() * sizeof(uint32_t));
+    
     v_uint32 vHostHashes;
     vHostHashes.resize(EquihashType::NHashStorageWords);
     copyToHost(vHostHashes.data(), hashes.get(), EquihashType::NHashStorageWords * sizeof(uint32_t));
@@ -606,6 +610,7 @@ void EhDevice<EquihashType>::debugWriteHashes(const bool bInitialHashes)
                     bAllZeroes = false;
                 sLog += strprintf("%08x ", htonl(vHostHashes[hashInputIdx]));
             }
+            sLog += strprintf("| %u", vBucketHashIndices[bucketHashStorageIdx + i]);
             if (bAllZeroes)
                 sLog += " (all zeroes)";
             sLog += "\n";
