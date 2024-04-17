@@ -20,14 +20,7 @@ TEST(MinerTest, CollisionBitMask)
 {
     for (int round = 0; round < Eh200_9::WK; round++)
     {
-        const uint32_t collisionBitLength = Eh200_9::CollisionBitLength;
-        const uint32_t globalBitOffset = round * collisionBitLength;
-        uint32_t wordOffset = globalBitOffset / numeric_limits<uint32_t>::digits;
-        if (wordOffset >= Eh200_9::HashWords - 1)
-            wordOffset = Eh200_9::HashWords - 2;
-        const uint32_t bitOffset = globalBitOffset - wordOffset * numeric_limits<uint32_t>::digits;
-        const uint64_t collisionBitMask = ((1ULL << collisionBitLength) - 1) << bitOffset;
-        cout << "round: " << round << ", word-offset: " << dec << wordOffset << ", collisionBitMask: " << hex << setfill('0') << setw(16) << collisionBitMask << dec << endl;
+        cout << "round: " << round << ", word-offset: " << dec << Eh200_9::HashWordOffsets[round] << ", collisionBitMask: " << hex << setfill('0') << setw(16) << Eh200_9::HashCollisionMasks[round] << dec << endl;
     }
 }
 
