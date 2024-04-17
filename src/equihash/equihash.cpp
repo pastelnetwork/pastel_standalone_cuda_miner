@@ -45,7 +45,8 @@ bool EquihashSolver<N, K>::IsValidSolution(string &error, const blake2b_state& b
     vector<FullStepRow<Equihash<N, K>::FinalFullWidth>> X;
     X.reserve(Equihash<N, K>::ProofSize);
     unsigned char tmpHash[BLAKE2B_OUTBYTES];
-    for (eh_index i : GetIndicesFromMinimal(soln, Equihash<N, K>::CollisionBitLength))
+    v_uint32 vIndices = GetIndicesFromMinimal(soln, Equihash<N, K>::CollisionBitLength);
+    for (eh_index i : vIndices)
     {
         GenerateHash(base_state, i/Equihash<N, K>::IndicesPerHashOutput, tmpHash, BLAKE2B_OUTBYTES);
         X.emplace_back(tmpHash+((i % Equihash<N, K>::IndicesPerHashOutput) * N/8),
@@ -60,25 +61,27 @@ bool EquihashSolver<N, K>::IsValidSolution(string &error, const blake2b_state& b
         vector<FullStepRow<Equihash<N, K>::FinalFullWidth>> Xc;
         for (int i = 0; i < X.size(); i += 2)
         {
-            if (!HasCollision(X[i], X[i+1], Equihash<N, K>::CollisionByteLength))
+            const uint32_t indexLeft = vIndices[i];
+            const uint32_t indexRight = vIndices[i + 1];
+            if (!HasCollision(X[i], X[i + 1], Equihash<N, K>::CollisionByteLength))
             {
                 error = strprintf(
 R"(Invalid solution: invalid collision length between StepRows
-X[i]   = %s,
-X[i+1] = %s)", X[i].GetHex(hashLen), X[i+1].GetHex(hashLen));
+X[%u] = %s,
+X[%u] = %s)", indexLeft, X[i].GetHex(hashLen), indexRight, X[i + 1].GetHex(hashLen));
                 return false;
             }
-            if (X[i+1].IndicesBefore(X[i], hashLen, lenIndices))
+            if (X[i + 1].IndicesBefore(X[i], hashLen, lenIndices))
             {
                 error = "Invalid solution: Index tree incorrectly ordered";
                 return false;
             }
-            if (!DistinctIndices(X[i], X[i+1], hashLen, lenIndices))
+            if (!DistinctIndices(X[i], X[i + 1], hashLen, lenIndices))
             {
                 error = "Invalid solution: duplicate indices";
                 return false;
             }
-            Xc.emplace_back(X[i], X[i+1], hashLen, lenIndices, iColByteLength);
+            Xc.emplace_back(X[i], X[i + 1], hashLen, lenIndices, iColByteLength);
         }
         X = Xc;
         hashLen -= Equihash<N, K>::CollisionByteLength;

@@ -3,6 +3,8 @@
 // file COPYING or https://www.opensource.org/licenses/mit-license.php.
 #pragma once
 #include <cstdint>
+#include <array>
+#include <limits>
 
 #include <local_types.h>
 
@@ -91,6 +93,96 @@ public:
     {
         eh_index indices[ProofSize];
     };
+
+private:
+    // Function to compute hash word offset for the given round
+    static constexpr uint32_t computeHashWordOffset(const uint32_t round)
+    {
+        const uint32_t globalBitOffset = round * CollisionBitLength;
+        uint32_t wordOffset = globalBitOffset / std::numeric_limits<uint32_t>::digits;
+        if (wordOffset >= HashWords - 1)
+            wordOffset = HashWords - 2;
+        return wordOffset;
+    }
+
+    // Helper constexpr function to populate the hashWordOffsets array
+    static constexpr std::array<uint32_t, WK> makeHashWordOffsets()
+    {
+        std::array<uint32_t, WK> offsets{};
+        for (size_t i = 0; i < WK; ++i)
+            offsets[i] = computeHashWordOffset(i);
+        return offsets;
+    }
+
+    static constexpr uint32_t computeHashBitOffset(const uint32_t round)
+    {
+        const uint32_t globalBitOffset = round * CollisionBitLength;
+        return globalBitOffset - computeHashWordOffset(round) * std::numeric_limits<uint32_t>::digits;
+    }
+
+    static constexpr std::array<uint32_t, WK> makeHashBitOffsets()
+    {
+        std::array<uint32_t, WK> offsets{};
+        for (size_t i = 0; i < WK; ++i)
+            offsets[i] = computeHashBitOffset(i);
+        return offsets;
+    }
+
+    static constexpr uint64_t makeHashCollisionMask(const uint32_t bitOffset)
+    {
+        return ((1ULL << CollisionBitLength) - 1) << bitOffset;
+    }
+
+    static constexpr std::array<uint64_t, WK> makeHashCollisionMasks()
+    {
+        std::array<uint64_t, WK> masks{};
+        for (size_t i = 0; i < WK; ++i)
+            masks[i] = makeHashCollisionMask(HashBitOffsets[i]);
+        return masks;
+    }
+
+    static constexpr uint32_t computeXoredHashWordOffset(const uint32_t round)
+    {
+        const uint32_t xoredGlobalBitOffset = (round + 1) * CollisionBitLength;
+        uint32_t xoredWordOffset = xoredGlobalBitOffset / std::numeric_limits<uint32_t>::digits;
+        if (xoredWordOffset >= HashWords - 1)
+            xoredWordOffset = HashWords - 2;
+        return xoredWordOffset;
+    }
+
+    static constexpr std::array<uint32_t, WK> makeXoredHashWordOffsets()
+    {
+        std::array<uint32_t, WK> offsets{};
+        for (size_t i = 0; i < WK; ++i)
+            offsets[i] = computeXoredHashWordOffset(i);
+        return offsets;
+    }
+
+    static constexpr uint32_t computeXoredHashBitOffset(const uint32_t round)
+    {
+        const uint32_t xoredGlobalBitOffset = (round + 1) * CollisionBitLength;
+        return xoredGlobalBitOffset - computeXoredHashWordOffset(round) * std::numeric_limits<uint32_t>::digits;
+    }
+
+    static constexpr std::array<uint32_t, WK> makeXoredHashBitOffsets()
+    {
+        std::array<uint32_t, WK> offsets{};
+        for (size_t i = 0; i < WK; ++i)
+            offsets[i] = computeXoredHashBitOffset(i);
+        return offsets;
+    }
+
+public:
+    // Array to store hash word offsets for each round
+    static inline constexpr std::array<uint32_t, WK> HashWordOffsets = makeHashWordOffsets();
+    // Array to store hash bit offsets for each round
+    static inline constexpr std::array<uint32_t, WK> HashBitOffsets = makeHashBitOffsets();
+    // Array to store hash collision masks for each round
+    static inline constexpr std::array<uint64_t, WK> HashCollisionMasks = makeHashCollisionMasks();
+    // Array to store xored hash word offsets for each round
+    static inline constexpr std::array<uint32_t, WK> XoredHashWordOffsets = makeXoredHashWordOffsets();
+    // Array to store xored hash bit offsets for each round
+    static inline constexpr std::array<uint32_t, WK> XoredHashBitOffsets = makeXoredHashBitOffsets();
 };
 
 using Eh200_9 = Equihash<200, 9>;

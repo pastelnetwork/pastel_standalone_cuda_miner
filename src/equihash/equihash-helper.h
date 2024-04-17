@@ -75,6 +75,7 @@ public:
     }
     v_uint8 GetIndices(size_t len, size_t lenIndices, size_t cBitLen) const;
 
+
     template<size_t W>
     friend bool DistinctIndices(const FullStepRow<W>& a, const FullStepRow<W>& b,
                                 size_t len, size_t lenIndices);
