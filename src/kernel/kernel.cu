@@ -91,7 +91,7 @@ void calculateGridAndBlockDims(dim3& gridDim, dim3& blockDim, size_t nHashes, in
     gridDim.x = (nBlocks + blockDim.x - 1) / blockDim.x;
 }
 
-__device__ bool atomicCheckAndIncrement(uint32_t* address, const uint32_t limit, uint32_t *oldValue)
+__forceinline__ __device__ bool atomicCheckAndIncrement(uint32_t* address, const uint32_t limit, uint32_t *oldValue)
 {
     uint32_t old = *address;
     uint32_t assumed;
@@ -274,16 +274,34 @@ __device__ void uint32ToString(uint32_t value, char* buffer, int* offset)
 }
 
 template <typename EquihashType>
+__forceinline__ __device__ uint2 getHashIndex(const uint32_t bucketIdx, const uint32_t hashIdx, const uint32_t *bucketHashIndicesPrevPtr)
+{
+    const auto ptr = bucketHashIndicesPrevPtr[bucketIdx * EquihashType::NBucketSizeExtra + hashIdx];
+    return make_uint2(ptr >> 16, ptr & 0xFFFF);
+}
+
+__forceinline__ __device__ bool haveDistinctCollisionIndices(const uint32_t idx1, const uint32_t idx2,
+    const uint32_t *collisionPairsBucketPtr)
+{
+    const auto collisionPairIdx1 = collisionPairsBucketPtr[idx1];
+    const auto collisionPairIdx2 = collisionPairsBucketPtr[idx2];
+    const uint32_t p1 = collisionPairIdx1 >> 16;
+    const uint32_t p2 = collisionPairIdx1 & 0xFFFF;
+    const uint32_t p3 = collisionPairIdx2 >> 16;
+    const uint32_t p4 = collisionPairIdx2 & 0xFFFF;
+    return (p1 != p3) && (p1 != p4) && (p2 != p3) && (p2 != p4);
+}
+
+template <typename EquihashType>
 __global__ void cudaKernel_processCollisions(
     const uint32_t* hashes, uint32_t* xoredHashes,
     uint32_t* bucketHashIndices,
-    const uint32_t* bucketHashCountersPrev,
     uint32_t* bucketHashCounters,
     uint32_t* collisionPairs, 
     const uint32_t* collisionOffsets,
     uint32_t* collisionCounters,
     uint32_t* discardedCounter,
-    const bool bLastRound,
+    const uint32_t round,
     const uint32_t maxCollisionsPerBucket,
     const uint32_t wordOffset, const uint64_t collisionBitMask,
     const uint32_t xoredBitOffset, const uint32_t xoredWordOffset)
@@ -292,14 +310,19 @@ __global__ void cudaKernel_processCollisions(
     if (bucketIdx >= EquihashType::NBucketCount)
         return;
 
+    const auto bucketHashCountersPrevPtr = bucketHashCounters + round * EquihashType::NBucketCount;
     const auto collisionPairsPtr = collisionPairs + bucketIdx * maxCollisionsPerBucket;
     const auto collisionBucketOffset = collisionOffsets[bucketIdx];
     const uint32_t startIdxStorage = bucketIdx * EquihashType::NBucketSizeExtra;
-    const uint32_t hashCount = bucketHashCountersPrev[bucketIdx];
+    const uint32_t hashCount = bucketHashCountersPrevPtr[bucketIdx];
     uint32_t xoredHash[EquihashType::HashWords];
     if (hashCount == 0)
         return;
 
+    const bool bLastRound = round == EquihashType::WK - 1;
+    const auto bucketHashIndicesPrevPtr = bucketHashIndices + round * EquihashType::NHashStorageCount;
+    auto bucketHashIndicesPtr = bucketHashIndices + (round + 1) * EquihashType::NHashStorageCount;
+    auto bucketHashCountersPtr = bucketHashCounters + (round + 1) * EquihashType::NBucketCount;
     bool processed[EquihashType::NBucketSizeExtra] = { false };
     uint32_t stackCapacity = 20;
     uint32_t *stack;
@@ -349,6 +372,14 @@ __global__ void cudaKernel_processCollisions(
                     // accept all zeroes hash result at the last round
                     if (bAllZeroes && !bLastRound)
                         continue; // skip if all zeroes
+
+                    // skip this collision if it is based on the hash pair from the same bucket and with repeated previous collision indices
+                    const auto prevHashIdx1 = getHashIndex<EquihashType>(bucketIdx, stack[i], bucketHashIndicesPrevPtr);
+                    const auto prevHashIdx2 = getHashIndex<EquihashType>(bucketIdx, rightPairIdx, bucketHashIndicesPrevPtr);
+                    if ((prevHashIdx1.x == prevHashIdx2.x) && 
+                        !haveDistinctCollisionIndices(prevHashIdx1.y, prevHashIdx2.y, collisionPairs + prevHashIdx1.x * maxCollisionsPerBucket))
+                        continue;
+
                     // define xored hash bucket based on the first NBucketIdxMask bits (starting from the CollisionBitLength)                
                     const uint32_t xoredBucketIdx = 
                         (static_cast<uint32_t>(((static_cast<uint64_t>(xoredHash[xoredWordOffset + 1]) << 32) | 
@@ -360,21 +391,22 @@ __global__ void cudaKernel_processCollisions(
                         if (xoredBucketIdx != 0)
                             continue; // skip if the bucket is not zero
 
-                        xoredHashIdxInBucket = atomicAdd(&bucketHashCounters[0], 1);
+                        xoredHashIdxInBucket = atomicAdd(&bucketHashCountersPtr[0], 1);
                     }
-                    else if (!atomicCheckAndIncrement(&bucketHashCounters[xoredBucketIdx], EquihashType::NBucketSizeExtra - 1, &xoredHashIdxInBucket))
+                    else if (!atomicCheckAndIncrement(&bucketHashCountersPtr[xoredBucketIdx], EquihashType::NBucketSizeExtra - 1, &xoredHashIdxInBucket))
                     {
                         atomicAdd(discardedCounter, 1);
                         continue; // skip if the bucket is full
                     }
-                    // index format: [BBBB BBBB BBBB BBBB] [NNNN NNNN NNNN NNNN]
-                    // B = bucket index, N = collision pair index
                     const uint32_t xoredBucketHashIdxStorage = xoredBucketIdx * EquihashType::NBucketSizeExtra + xoredHashIdxInBucket;
                     const uint32_t xoredBucketHashIdxStoragePtr = xoredBucketHashIdxStorage * EquihashType::HashWords;
                     for (uint32_t j = 0; j < EquihashType::HashWords; ++j)
                         xoredHashes[xoredBucketHashIdxStoragePtr + j] = xoredHash[j];
                     const uint32_t collisionPairIdx = collisionBucketOffset + collisionCounters[bucketIdx];
-                    bucketHashIndices[xoredBucketHashIdxStorage] = (bucketIdx << 16) | collisionPairIdx;
+
+                    // hash index format: [BBBB BBBB BBBB BBBB] [NNNN NNNN NNNN NNNN]
+                    // B = bucket index, N = collision pair index
+                    bucketHashIndicesPtr[xoredBucketHashIdxStorage] = (bucketIdx << 16) | collisionPairIdx;
                     if (hashLeft < hashRight)
                         collisionPairsPtr[collisionPairIdx] = (rightPairIdx << 16) | stack[i];
                     else
@@ -409,14 +441,13 @@ void EhDevice<EquihashType>::processCollisions()
 
         cudaKernel_processCollisions<EquihashType><<<gridDim, blockDim>>>(
                     hashes.get(), xoredHashes.get(),
-                    bucketHashIndices.get() + (round + 1) * EquihashType::NHashStorageCount,
-                    bucketHashCounters.get() + round * EquihashType::NBucketCount,
-                    bucketHashCounters.get() + (round + 1) * EquihashType::NBucketCount,
+                    bucketHashIndices.get(),
+                    bucketHashCounters.get(),
                     collisionPairs.get(),
                     collisionOffsets.get() + round * EquihashType::NBucketCount, 
                     collisionCounters.get(),
                     discardedCounter.get(),
-                    round == EquihashType::WK - 1,
+                    round,
                     MaxCollisionsPerBucket,
                     EquihashType::HashWordOffsets[round],
                     EquihashType::HashCollisionMasks[round],

@@ -19,7 +19,7 @@ bool EquihashSolver<N, K>::InitializeState(blake2b_state &state, const string &s
 {
     if (sPersString.length() != Equihash<N, K>::PERS_STRING_LENGTH)
         return false;
-    unsigned char personalization[BLAKE2B_PERSONALBYTES] = {0};
+    uint8_t personalization[BLAKE2B_PERSONALBYTES] = {0};
     memcpy(personalization, sPersString.c_str(), sPersString.length());
     const uint32_t constN = Equihash<N, K>::WN;
     const uint32_t constK = Equihash<N, K>::WK;
@@ -28,7 +28,7 @@ bool EquihashSolver<N, K>::InitializeState(blake2b_state &state, const string &s
     const auto p = &personalization[sPersString.length()];
     memcpy(p, &le_N, sizeof(le_N));
     memcpy(p + sizeof(le_N), &le_K, sizeof(le_K));
-    blake2b_init_salt_personal_host(&state, nullptr, 0, BLAKE2B_OUTBYTES, nullptr, 0, personalization, BLAKE2B_PERSONALBYTES);
+    blake2b_init_salt_personal_host(&state, nullptr, 0, Equihash<N, K>::HashOutput, nullptr, 0, personalization, sizeof(personalization));
     return true;
 }
 
@@ -44,11 +44,11 @@ bool EquihashSolver<N, K>::IsValidSolution(string &error, const blake2b_state& b
 
     vector<FullStepRow<Equihash<N, K>::FinalFullWidth>> X;
     X.reserve(Equihash<N, K>::ProofSize);
-    unsigned char tmpHash[BLAKE2B_OUTBYTES];
+    uint8_t tmpHash[Equihash<N, K>::HashOutput];
     v_uint32 vIndices = GetIndicesFromMinimal(soln, Equihash<N, K>::CollisionBitLength);
     for (eh_index i : vIndices)
     {
-        GenerateHash(base_state, i/Equihash<N, K>::IndicesPerHashOutput, tmpHash, BLAKE2B_OUTBYTES);
+        GenerateHash(base_state, i/Equihash<N, K>::IndicesPerHashOutput, tmpHash, sizeof(tmpHash));
         X.emplace_back(tmpHash+((i % Equihash<N, K>::IndicesPerHashOutput) * N/8),
                        N/8, Equihash<N, K>::HashLength, Equihash<N, K>::CollisionBitLength, i);
     }

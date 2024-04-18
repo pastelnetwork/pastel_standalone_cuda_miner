@@ -1,10 +1,12 @@
 // Copyright (c) 2024 The Pastel developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://www.opensource.org/licenses/mit-license.php.
+#include <cassert>
+
 #include <src/kernel/memutils.h>
 #include <blake2b.h>
 
-__device__ __constant__ uint8_t blake2b_sigma[12][16] = {
+__constant__ uint8_t blake2b_sigma[12][16] = {
     {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},
     {14, 10, 4, 8, 9, 15, 13, 6, 1, 12, 0, 2, 11, 7, 5, 3},
     {11, 8, 12, 0, 5, 2, 15, 13, 10, 14, 3, 6, 7, 1, 9, 4},
@@ -26,33 +28,49 @@ __constant__ uint64_t blake2b_IV[8] = {
     0x1f83d9abfb41bd6bULL, 0x5be0cd19137e2179ULL
 };
 
-__device__ uint64_t load64(const void *src)
+__forceinline__ __device__ uint64_t load64(const void *src)
 {
-    const uint8_t *p = (const uint8_t *)src;
-    return ((uint64_t)(p[0]) << 0) |
-           ((uint64_t)(p[1]) << 8) |
-           ((uint64_t)(p[2]) << 16) |
-           ((uint64_t)(p[3]) << 24) |
-           ((uint64_t)(p[4]) << 32) |
-           ((uint64_t)(p[5]) << 40) |
-           ((uint64_t)(p[6]) << 48) |
-           ((uint64_t)(p[7]) << 56);
+    const uintptr_t addr = reinterpret_cast<uintptr_t>(src);
+    if (addr % 8 == 0)
+        // The address is aligned, perform a direct load
+        return __ldg((const uint64_t*)src);
+    else {
+        // The address is not aligned, perform a safe, byte-by-byte load
+        const uint8_t *p = (const uint8_t *)src;
+        return ((uint64_t)p[0]        ) |
+               ((uint64_t)p[1] << 8   ) |
+               ((uint64_t)p[2] << 16  ) |
+               ((uint64_t)p[3] << 24  ) |
+               ((uint64_t)p[4] << 32  ) |
+               ((uint64_t)p[5] << 40  ) |
+               ((uint64_t)p[6] << 48  ) |
+               ((uint64_t)p[7] << 56  );
+    }    
 }
 
-__device__ void store64(void *dst, uint64_t w)
+__forceinline__ __device__ void store64(void *dst, uint64_t w)
 {
-    uint8_t *p = (uint8_t *)dst;
-    p[0] = (uint8_t)(w >> 0);
-    p[1] = (uint8_t)(w >> 8);
-    p[2] = (uint8_t)(w >> 16);
-    p[3] = (uint8_t)(w >> 24);
-    p[4] = (uint8_t)(w >> 32);
-    p[5] = (uint8_t)(w >> 40);
-    p[6] = (uint8_t)(w >> 48);
-    p[7] = (uint8_t)(w >> 56);
+    const uintptr_t addr = reinterpret_cast<uintptr_t>(dst);
+    if (addr % 8 == 0)    
+    {
+        volatile uint64_t* p = (volatile uint64_t*)dst;
+        *p = w;
+    }
+    else {
+        // The address is not aligned, perform a safe, byte-by-byte store
+        uint8_t *p = (uint8_t *)dst;
+        p[0] = (uint8_t)(w >> 0);
+        p[1] = (uint8_t)(w >> 8);
+        p[2] = (uint8_t)(w >> 16);
+        p[3] = (uint8_t)(w >> 24);
+        p[4] = (uint8_t)(w >> 32);
+        p[5] = (uint8_t)(w >> 40);
+        p[6] = (uint8_t)(w >> 48);
+        p[7] = (uint8_t)(w >> 56);
+    }
 }
 
-__device__ uint64_t rotr64(uint64_t x, uint64_t n)
+__forceinline__ __device__ uint64_t rotr64(uint64_t x, uint64_t n)
 {
     return (x >> n) | (x << (64 - n));
 }
@@ -69,10 +87,28 @@ __device__ void G(int r, int i, uint64_t &a, uint64_t &b, uint64_t &c, uint64_t 
     b = rotr64(b ^ c, 63);
 }
 
-__device__ void blake2b_increment_counter(blake2b_state *S, uint64_t inc)
+__forceinline__ __device__ void blake2b_increment_counter(blake2b_state *S, uint64_t inc)
 {
     S->t[0] += inc;
     S->t[1] += (S->t[0] < inc);
+}
+
+__forceinline__ __device__ int blake2b_is_lastblock(const blake2b_state *S)
+{
+    return S->f[0] != 0;
+}
+
+__forceinline__ __device__ void blake2b_set_lastnode(blake2b_state *S)
+{
+    S->f[1] = (uint64_t)(-1);
+}
+
+__forceinline__ __device__ void blake2b_set_lastblock(blake2b_state *S)
+{
+    if (S->last_node)
+        blake2b_set_lastnode(S);
+
+    S->f[0] = (uint64_t)(-1);
 }
 
 __device__ bool blake2b_init_device(blake2b_state *state, size_t outlen)
@@ -170,28 +206,36 @@ __device__ void blake2b_update_device(blake2b_state *state, const void *pin, siz
 
 __device__ bool blake2b_final_device(blake2b_state *state, void *out, size_t outlen)
 {
-    if (!out || outlen < state->outlen)
+    if (!out || outlen > BLAKE2B_OUTBYTES)
         return false;
 
-    if (state->f[0])
+    if (blake2b_is_lastblock(state))
         return false;
 
-    blake2b_increment_counter(state, state->buflen);
-
-    if (state->last_node )
-        state->f[1] = (uint64_t)(-1);
-
-    state->f[0] = (uint64_t)(-1);
-
-    memset(state->buf + state->buflen, 0, BLAKE2B_BLOCKBYTES - state->buflen); // Padding
-    blake2b_compress_device(state, state->buf);
+    if (state->buflen > BLAKE2B_BLOCKBYTES)
+    {
+        blake2b_increment_counter(state, BLAKE2B_BLOCKBYTES);
+        blake2b_compress_device(state, state->buf);
+        state->buflen -= BLAKE2B_BLOCKBYTES;
+        assert(state->buflen <= BLAKE2B_BLOCKBYTES);
+        memcpy(state->buf, state->buf + BLAKE2B_BLOCKBYTES, state->buflen);
+    }
     
+    blake2b_increment_counter(state, state->buflen);
+    blake2b_set_lastblock(state);
+    memset(state->buf + state->buflen, 0, sizeof(state->buf) - state->buflen); // Padding
+    blake2b_compress_device(state, state->buf);
+
     uint8_t buffer[BLAKE2B_OUTBYTES] = {0};
     for (size_t i = 0; i < 8; ++i)
         store64(buffer + sizeof(state->h[i]) * i, state->h[i]);
 
-    memcpy(out, buffer, state->outlen);
+    memcpy(out, buffer, outlen);
+
     memset(buffer, 0, sizeof(buffer));
+    memset(state->h, 0, sizeof(state->h));
+    memset(state->buf, 0, sizeof(state->buf));
+
     return true;
 }
 
