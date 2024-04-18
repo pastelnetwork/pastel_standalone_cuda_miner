@@ -9,6 +9,7 @@
 #include <local_types.h>
 #include <blake2b.h>
 #include <src/equihash/blake2b_host.h>
+#include <src/equihash/equihash.h>
 #include <src/kernel/blake2b_device.h>
 #include <src/utils/strencodings.h>
 
@@ -110,11 +111,12 @@ __global__ void generate_hash_kernel(blake2b_state* state, uint32_t leb, uint8_t
 TEST(EquihashTest, GenerateHashHostAndKernel)
 {
     // Set up the test parameters
-    const uint32_t leb = 123;
+    const uint32_t leb = 1262;
 
     // Initialize the Blake2b state on the host
     blake2b_state hostState;
-    blake2b_init_host(&hostState, BLAKE2B_OUTBYTES);
+    auto eh = EhSolver200_9();
+    eh.InitializeState(hostState, DEFAULT_EQUIHASH_PERS_STRING);
 
     // Allocate memory on the device for the Blake2b state and hash
     blake2b_state* d_state;
