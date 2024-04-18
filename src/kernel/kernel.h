@@ -72,7 +72,7 @@ public:
     void debugTraceSolution(const uint32_t bucketIdx);
 
     static inline constexpr uint32_t ThreadsPerBlock = 256;
-    static inline constexpr uint32_t MaxCollisionsPerBucket = 15'000;
+    static inline constexpr uint32_t MaxCollisionsPerBucket = 10'000;
     static inline constexpr uint32_t MaxSolutions = 10;
 
 private:

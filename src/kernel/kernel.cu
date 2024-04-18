@@ -210,12 +210,15 @@ void EhDevice<EquihashType>::debugWriteBucketIndices()
     copyToHost(vBucketHashIndices.data(), bucketHashIndices.get() + round * EquihashType::NHashStorageCount,
         EquihashType::NHashStorageCount * sizeof(uint32_t));
 
+    uint32_t nMaxCount = 0;
     m_dbgFile << "------\n";
     m_dbgFile << endl << "Bucket hash indices for round #" << round << ":" << endl;
     for (size_t i = 0; i < EquihashType::NBucketCount; ++i)
     {
         if (vBucketHashCounters[i] == 0)
             continue;
+        if (vBucketHashCounters[i] > nMaxCount)
+            nMaxCount = vBucketHashCounters[i];
         m_dbgFile << strprintf("\nRound %u, Bucket #%u, %u hash indices: ", round, i, vBucketHashCounters[i]);
         for (size_t j = 0; j < vBucketHashCounters[i]; ++j)
         {
@@ -233,6 +236,7 @@ void EhDevice<EquihashType>::debugWriteBucketIndices()
         }
         m_dbgFile << endl;
     }
+    m_dbgFile << "\nRound " << dec << round << " max hash indices per bucket: " << dec << nMaxCount << endl;
 }
 
 template <typename EquihashType>
@@ -465,14 +469,16 @@ __global__ void cudaKernel_findSolutions(
     uint32_t hashIdx = 0;
     uint32_t nSolutionCount = 0;
 
-    for (uint32_t idxInBucket = 0; idxInBucket < hashCount; 
-        ++idxInBucket, hashIdx += EquihashType::HashWords)
+    const auto bucketHashIndicesLastPtr = bucketHashIndices + EquihashType::WK * EquihashType::NHashStorageCount;
+
+    for (uint32_t mainIndex = 0; mainIndex < hashCount; 
+        ++mainIndex, hashIdx += EquihashType::HashWords)
     {
         auto hashPtr = hashes + hashIdx + EquihashType::HashWords - 2;
         if (hashPtr[0] || hashPtr[1])
             continue;
 
-        indices[0] = idxInBucket;
+        pIndices[0] = mainIndex;
         uint32_t numIndices = 1;
 
         bool bDistinctIndices = true;
@@ -491,6 +497,7 @@ __global__ void cudaKernel_findSolutions(
 
                 const auto storageIdx = idxBucket * EquihashType::NBucketSizeExtra + idxInBucket;
                 const auto ptr = bucketHashIndicesRoundPtr[storageIdx];
+                const auto collisionPairBucketIdxMasked = ptr & 0xFFFF0000;
                 const auto collisionPairBucketIdx = ptr >> 16;
                 const auto collisionPairIndex = ptr & 0xFFFF;
 
@@ -499,7 +506,7 @@ __global__ void cudaKernel_findSolutions(
                 const uint32_t pairIdx1 = collisionPairInfo >> 16;
                 const uint32_t pairIdx2 = collisionPairInfo & 0xFFFF;
                 
-                uint32_t newIndex = collisionPairBucketIdx * EquihashType::NBucketSizeExtra + pairIdx1;
+                uint32_t newIndex = collisionPairBucketIdxMasked | pairIdx1;
                 for (uint32_t i = 0; i < numIndicesNew; ++i)
                 {
                     if (pIndicesNew[i] == newIndex)
@@ -511,7 +518,7 @@ __global__ void cudaKernel_findSolutions(
                 if (!bDistinctIndices)
                     break;
                 pIndicesNew[numIndicesNew++] = newIndex;
-                newIndex = collisionPairBucketIdx * EquihashType::NBucketSizeExtra + pairIdx2;
+                newIndex = collisionPairBucketIdxMasked | pairIdx2;
                 for (uint32_t i = 0; i < numIndicesNew; ++i)
                 {
                     if (pIndicesNew[i] == newIndex)
@@ -536,7 +543,7 @@ __global__ void cudaKernel_findSolutions(
             continue;
 
         // found solution
-        printf("Found solution [%u] \n", idxInBucket);
+        printf("Found solution [%u] \n", mainIndex);
 
         // map to the original indices
         for (uint32_t i = 0; i < EquihashType::ProofSize; ++i)
