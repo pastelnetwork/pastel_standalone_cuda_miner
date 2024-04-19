@@ -154,23 +154,8 @@ __global__ void cudaKernel_generateInitialHashes(const blake2b_state* state, uin
             const uint32_t bucketStorageHashIdxPtr = bucketStorageHashIdx * EquihashType::HashWords;
 
             bucketHashIndices[bucketStorageHashIdx] = curHashIdx;
-
-            for (uint32_t k = 0; k < EquihashType::HashFullWords; ++k)
-            {
-                hashes[bucketStorageHashIdxPtr + k] = 
-                    (static_cast<uint32_t>(hash[hashByteOffset + 3]) << 24) | 
-                    (static_cast<uint32_t>(hash[hashByteOffset + 2]) << 16) | 
-                    (static_cast<uint32_t>(hash[hashByteOffset + 1]) << 8) | 
-                    static_cast<uint32_t>(hash[hashByteOffset]);
-                    hashByteOffset += sizeof(uint32_t);
-            }
-            if (EquihashType::HashPartialBytesLeft > 0)
-            {
-                uint32_t nWord = 0;
-                for (uint32_t k = 0; k < EquihashType::HashPartialBytesLeft; ++k)
-                    nWord |= static_cast<uint32_t>(hash[hashByteOffset++]) << (k * 8);
-                hashes[bucketStorageHashIdxPtr + EquihashType::HashFullWords] = nWord;
-            }
+            memcpy(hashes + bucketStorageHashIdxPtr, hash + hashByteOffset, EquihashType::SingleHashOutput);
+            hashByteOffset += EquihashType::SingleHashOutput;
             ++curHashIdx;
         }
         ++hashInputIdx;
@@ -351,6 +336,7 @@ __global__ void cudaKernel_processCollisions(
         {
             if (processed[rightPairIdx])
                 continue;
+
             const uint32_t hashWordIdxRight = hashIdxRight + wordOffset;
             const uint64_t hashRight = (static_cast<uint64_t>(hashes[hashWordIdxRight + 1]) << 32) | 
                                                               hashes[hashWordIdxRight];
@@ -358,6 +344,8 @@ __global__ void cudaKernel_processCollisions(
             if (maskedHashLeft == maskedHashRight)
             {
                 processed[rightPairIdx] = true;
+                if (bucketIdx == 901 && rightPairIdx == 288)
+                    printf("pair: %u %u\n", leftPairIdx, rightPairIdx);
                 for (uint32_t i = 0; i < stackSize; ++i)
                 {
                     // hash collision found - xor the hashes and store the result
@@ -373,12 +361,15 @@ __global__ void cudaKernel_processCollisions(
                     if (bAllZeroes && !bLastRound)
                         continue; // skip if all zeroes
 
-                    // skip this collision if it is based on the hash pair from the same bucket and with repeated previous collision indices
-                    const auto prevHashIdx1 = getHashIndex<EquihashType>(bucketIdx, stack[i], bucketHashIndicesPrevPtr);
-                    const auto prevHashIdx2 = getHashIndex<EquihashType>(bucketIdx, rightPairIdx, bucketHashIndicesPrevPtr);
-                    if ((prevHashIdx1.x == prevHashIdx2.x) && 
-                        !haveDistinctCollisionIndices(prevHashIdx1.y, prevHashIdx2.y, collisionPairs + prevHashIdx1.x * maxCollisionsPerBucket))
-                        continue;
+                    if (round > 0)
+                    {
+                        // skip this collision if it is based on the hash pair from the same bucket and with repeated previous collision indices
+                        const auto prevHashIdx1 = getHashIndex<EquihashType>(bucketIdx, stack[i], bucketHashIndicesPrevPtr);
+                        const auto prevHashIdx2 = getHashIndex<EquihashType>(bucketIdx, rightPairIdx, bucketHashIndicesPrevPtr);
+                        if ((prevHashIdx1.x == prevHashIdx2.x) && 
+                            !haveDistinctCollisionIndices(prevHashIdx1.y, prevHashIdx2.y, collisionPairs + prevHashIdx1.x * maxCollisionsPerBucket))
+                            continue;
+                    }
 
                     // define xored hash bucket based on the first NBucketIdxMask bits (starting from the CollisionBitLength)                
                     const uint32_t xoredBucketIdx = 

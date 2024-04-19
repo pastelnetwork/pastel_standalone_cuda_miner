@@ -21,7 +21,12 @@ TEST(MinerTest, CollisionBitMask)
 {
     for (int round = 0; round < Eh200_9::WK; round++)
     {
-        cout << "round: " << round << ", word-offset: " << dec << Eh200_9::HashWordOffsets[round] << ", collisionBitMask: " << hex << setfill('0') << setw(16) << Eh200_9::HashCollisionMasks[round] << dec << endl;
+        cout << "round: " << round << 
+                ", wordOffset: " << dec << Eh200_9::HashWordOffsets[round] << 
+                ", bitOffset " << dec << Eh200_9::HashBitOffsets[round] <<
+                ", collisionBitMask: " << hex << setfill('0') << setw(16) << Eh200_9::HashCollisionMasks[round] <<
+                "|| "
+                dec << endl;
     }
 }
 

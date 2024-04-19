@@ -128,16 +128,39 @@ private:
         return offsets;
     }
 
-    static constexpr uint64_t makeHashCollisionMask(const uint32_t bitOffset)
-    {
-        return ((1ULL << CollisionBitLength) - 1) << bitOffset;
-    }
-
+/*
+round: 0, word-offset: 0, collisionBitMask: 00000000 00f0ffff
+round: 1, word-offset: 0, collisionBitMask: 000000ff ff0f0000
+round: 2, word-offset: 1, collisionBitMask: 00000000 f0ffff00 
+round: 3, word-offset: 1, collisionBitMask: 0000ffff 0f000000
+round: 4, word-offset: 2, collisionBitMask: 000000f0 ffff0000
+round: 5, word-offset: 3, collisionBitMask: 00000000 00ffff0f
+round: 6, word-offset: 3, collisionBitMask: 0000f0ff ff000000
+round: 7, word-offset: 4, collisionBitMask: 00000000 ffff0f00
+round: 8, word-offset: 5, collisionBitMask: 00000000 00f0ffff
+*/
     static constexpr std::array<uint64_t, WK> makeHashCollisionMasks()
     {
         std::array<uint64_t, WK> masks{};
+        constexpr bool bNeedAdditionalByte = CollisionBitLength % 8 != 0;
+        uint32_t fullByteBitMask = (1U << (CollisionBitLength / 8) * 8) - 1;  // collision mask for full bytes
         for (size_t i = 0; i < WK; ++i)
-            masks[i] = makeHashCollisionMask(HashBitOffsets[i]);
+        {
+            uint32_t bitOffset = computeHashBitOffset(i);
+            uint64_t mask = 0;
+            if constexpr (bNeedAdditionalByte)
+            {
+                // Adjust the mask based on the bit offset's alignment
+                if (bitOffset % 8 == 4) // Odd alignment, nibble starts in the middle
+                {
+                    mask = (fullByteBitMask << 8) | 0xFULL;
+                    bitOffset -= 4;
+                } else // Even alignment
+                    mask = (0xF0ULL << (CollisionBitLength - 4)) | fullByteBitMask;
+            } else
+                mask = fullByteBitMask;
+            masks[i] = mask << bitOffset;
+        }
         return masks;
     }
 
