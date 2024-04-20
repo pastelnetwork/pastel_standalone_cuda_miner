@@ -43,6 +43,15 @@ int getMaxThreadsPerBlock(int deviceId)
 }
 
 template<typename EquihashType>
+__constant__ uint32_t CudaEquihashConstants<EquihashType>::d_HashWordOffsets[EquihashType::WK];
+
+template<typename EquihashType>
+__constant__ uint32_t CudaEquihashConstants<EquihashType>::d_HashBitOffsets[EquihashType::WK];
+
+template<typename EquihashType>
+__constant__ uint64_t CudaEquihashConstants<EquihashType>::d_HashCollisionMasks[EquihashType::WK];
+
+template<typename EquihashType>
 bool EhDevice<EquihashType>::allocate_memory()
 {
     try
@@ -278,6 +287,32 @@ __forceinline__ __device__ bool haveDistinctCollisionIndices(const uint32_t idx1
 }
 
 template <typename EquihashType>
+__device__ int compare_hashes(const uint32_t* x, const uint32_t* y)
+{
+    uint64_t x64 = (static_cast<uint64_t>(x[1]) << 32) | x[0];
+    uint64_t y64 = (static_cast<uint64_t>(y[1]) << 32) | y[0];
+    uint32_t curWordOffset = 0; 
+    for (size_t round = 0; round < EquihashType::WK; ++round)
+    {
+        if (EquihashType::HashWordOffsets[round] > curWordOffset)
+        {
+            curWordOffset = EquihashType::HashWordOffsets[round];
+            x64 = (static_cast<uint64_t>(x[curWordOffset + 1]) << 32) | x[curWordOffset];
+            y64 = (static_cast<uint64_t>(y[curWordOffset + 1]) << 32) | y[curWordOffset];
+        }
+        const uint32_t rx = x64 & EquihashType::HashCollisionMasks[round];
+        const uint32_t ry = y64 & EquihashType::HashCollisionMasks[round];
+
+        if (rx != rx)
+        {
+            // Return the difference of the first differing bits, ensuring the sign is correct
+            return (rx > ry) ? 1 : -1;
+        }
+    }
+    return 0; // Hashes are equivalent
+}
+
+template <typename EquihashType>
 __global__ void cudaKernel_processCollisions(
     const uint32_t* hashes, uint32_t* xoredHashes,
     uint32_t* bucketHashIndices,
@@ -344,8 +379,6 @@ __global__ void cudaKernel_processCollisions(
             if (maskedHashLeft == maskedHashRight)
             {
                 processed[rightPairIdx] = true;
-                if (bucketIdx == 901 && rightPairIdx == 288)
-                    printf("pair: %u %u\n", leftPairIdx, rightPairIdx);
                 for (uint32_t i = 0; i < stackSize; ++i)
                 {
                     // hash collision found - xor the hashes and store the result
@@ -372,10 +405,12 @@ __global__ void cudaKernel_processCollisions(
                     }
 
                     // define xored hash bucket based on the first NBucketIdxMask bits (starting from the CollisionBitLength)                
-                    const uint32_t xoredBucketIdx = 
+                    uint32_t xoredBucketIdx = 
                         (static_cast<uint32_t>(((static_cast<uint64_t>(xoredHash[xoredWordOffset + 1]) << 32) | 
-                                                                       xoredHash[xoredWordOffset]) >> xoredBitOffset))
-                        & EquihashType::NBucketIdxMask;
+                                                                       xoredHash[xoredWordOffset]) >> xoredBitOffset));
+                    if (round % 2 == 0)
+                        xoredBucketIdx = (xoredBucketIdx >> 4) | (xoredBucketIdx & 0x0F);
+                    xoredBucketIdx &= EquihashType::NBucketIdxMask;
                     uint32_t xoredHashIdxInBucket = 0;
                     if (bLastRound)
                     {
@@ -398,8 +433,8 @@ __global__ void cudaKernel_processCollisions(
                     // hash index format: [BBBB BBBB BBBB BBBB] [NNNN NNNN NNNN NNNN]
                     // B = bucket index, N = collision pair index
                     bucketHashIndicesPtr[xoredBucketHashIdxStorage] = (bucketIdx << 16) | collisionPairIdx;
-                    if (hashLeft < hashRight)
-                        collisionPairsPtr[collisionPairIdx] = (rightPairIdx << 16) | stack[i];
+                    if (compare_hashes<EquihashType>(hashes + hashWordIdxLeft, hashes + hashWordIdxRight) < 0)
+                       collisionPairsPtr[collisionPairIdx] = (rightPairIdx << 16) | stack[i];
                     else
                         collisionPairsPtr[collisionPairIdx] = (stack[i] << 16) | rightPairIdx;
                     collisionCounters[bucketIdx] += 1;
@@ -577,6 +612,7 @@ __global__ void cudaKernel_findSolutions(
         if (++nSolutionCount >= maxSolutionCount)
             break;
     }
+    *solutionCount = nSolutionCount;
 }
 
 template<typename EquihashType>
@@ -1013,8 +1049,7 @@ uint32_t EhDevice<EquihashType>::solver()
         DBG_EQUI_WRITE_FN(debugWriteBucketIndices());
     }
 
-    uint32_t nSolutionCount = findSolutions();
-    return nSolutionCount;
+    return findSolutions();
 }
 
 // Explicit template instantiation

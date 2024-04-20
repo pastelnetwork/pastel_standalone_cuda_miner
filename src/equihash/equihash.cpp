@@ -58,7 +58,7 @@ bool EquihashSolver<N, K>::IsValidSolution(string &error, const blake2b_state& b
     const int iColByteLength = static_cast<const int>(Equihash<N, K>::CollisionByteLength);
     while (X.size() > 1)
     {
-        vector<FullStepRow<Equihash<N, K>::FinalFullWidth>> Xc;
+        vector<FullStepRow<Equihash<N, K>::FinalFullWidth>> Xc;        
         for (int i = 0; i < X.size(); i += 2)
         {
             const uint32_t indexLeft = vIndices[i];
@@ -73,7 +73,8 @@ X[%u] = %s)", indexLeft, X[i].GetHex(hashLen), indexRight, X[i + 1].GetHex(hashL
             }
             if (X[i + 1].IndicesBefore(X[i], hashLen, lenIndices))
             {
-                error = "Invalid solution: Index tree incorrectly ordered";
+                error = strprintf("Invalid solution: index tree incorrectly ordered, #%d, %u > %u", 
+                    i, indexLeft, indexRight);
                 return false;
             }
             if (!DistinctIndices(X[i], X[i + 1], hashLen, lenIndices))

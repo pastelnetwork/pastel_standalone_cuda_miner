@@ -19,7 +19,7 @@
 #define DEBUG_FN(func)
 #endif
 
-#define DBG_EQUI_WRITE
+//#define DBG_EQUI_WRITE
 #ifdef DBG_EQUI_WRITE
 #define DBG_EQUI_WRITE_FN(func) func
 #else
@@ -73,7 +73,7 @@ public:
 
     static inline constexpr uint32_t ThreadsPerBlock = 256;
     static inline constexpr uint32_t MaxCollisionsPerBucket = 10'000;
-    static inline constexpr uint32_t MaxSolutions = 10;
+    static inline constexpr uint32_t MaxSolutions = 100;
 
 private:
     void generateInitialHashes();

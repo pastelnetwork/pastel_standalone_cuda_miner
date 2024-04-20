@@ -59,6 +59,8 @@ public:
     static inline constexpr uint32_t CollisionBitLength = N / (K + 1); // DIGITBITS=20
     // The number of bytes used to store a single digit of the collision bits.
     static inline constexpr uint32_t CollisionByteLength = (CollisionBitLength + 7) / 8;
+    static inline constexpr uint32_t CollisionBitMask = (1 << CollisionBitLength) - 1;
+    static inline constexpr uint32_t CollisionBitMaskWordPadding = std::numeric_limits<uint32_t>::digits - CollisionBitLength; 
     // The length in bytes of a hash used during the (K+1)-th collision round.
     static inline constexpr uint32_t HashLength = (K + 1) * CollisionByteLength;
     // The full width in bytes of a list entry before the final round, including collision data and indices.
@@ -129,15 +131,15 @@ private:
     }
 
 /*
-round: 0, word-offset: 0, collisionBitMask: 00000000 00f0ffff
-round: 1, word-offset: 0, collisionBitMask: 000000ff ff0f0000
-round: 2, word-offset: 1, collisionBitMask: 00000000 f0ffff00 
-round: 3, word-offset: 1, collisionBitMask: 0000ffff 0f000000
-round: 4, word-offset: 2, collisionBitMask: 000000f0 ffff0000
-round: 5, word-offset: 3, collisionBitMask: 00000000 00ffff0f
-round: 6, word-offset: 3, collisionBitMask: 0000f0ff ff000000
-round: 7, word-offset: 4, collisionBitMask: 00000000 ffff0f00
-round: 8, word-offset: 5, collisionBitMask: 00000000 00f0ffff
+round: 0, wordOffset: 0, bitOffset  0, collisionBitMask: 00000000 00f0ffff || xoredWordOffset: 0, xoredBitOffset 16
+round: 1, wordOffset: 0, bitOffset 20, collisionBitMask: 000000ff ff0f0000 || xoredWordOffset: 1, xoredBitOffset 8
+round: 2, wordOffset: 1, bitOffset 08, collisionBitMask: 00000000 f0ffff00 || xoredWordOffset: 1, xoredBitOffset 24
+round: 3, wordOffset: 1, bitOffset 28, collisionBitMask: 0000ffff 0f000000 || xoredWordOffset: 2, xoredBitOffset 16
+round: 4, wordOffset: 2, bitOffset 16, collisionBitMask: 000000f0 ffff0000 || xoredWordOffset: 3, xoredBitOffset 0
+round: 5, wordOffset: 3, bitOffset 04, collisionBitMask: 00000000 00ffff0f || xoredWordOffset: 3, xoredBitOffset 24
+round: 6, wordOffset: 3, bitOffset 24, collisionBitMask: 0000f0ff ff000000 || xoredWordOffset: 4, xoredBitOffset 8
+round: 7, wordOffset: 4, bitOffset 12, collisionBitMask: 00000000 ffff0f00 || xoredWordOffset: 5, xoredBitOffset 0
+round: 8, wordOffset: 5, bitOffset 00, collisionBitMask: 00000000 00f0ffff || xoredWordOffset: 5, xoredBitOffset 16
 */
     static constexpr std::array<uint64_t, WK> makeHashCollisionMasks()
     {
@@ -184,7 +186,10 @@ round: 8, word-offset: 5, collisionBitMask: 00000000 00f0ffff
     static constexpr uint32_t computeXoredHashBitOffset(const uint32_t round)
     {
         const uint32_t xoredGlobalBitOffset = (round + 1) * CollisionBitLength;
-        return xoredGlobalBitOffset - computeXoredHashWordOffset(round) * std::numeric_limits<uint32_t>::digits;
+        uint32_t xoredBitOffset = xoredGlobalBitOffset - computeXoredHashWordOffset(round) * std::numeric_limits<uint32_t>::digits;
+        if (xoredBitOffset % 8 == 4)
+            xoredBitOffset -= 4;
+        return xoredBitOffset;
     }
 
     static constexpr std::array<uint32_t, WK> makeXoredHashBitOffsets()
