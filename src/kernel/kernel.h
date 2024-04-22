@@ -42,7 +42,7 @@ template<typename EquihashType>
 class EhDevice
 {
 public:
-    EhDevice() noexcept = default;
+    EhDevice();
     ~EhDevice() {}
 
     std::unique_ptr<blake2b_state, CudaDeleter> initialState;

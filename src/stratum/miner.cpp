@@ -20,11 +20,6 @@ uint32_t miningLoop(const blake2b_state& initialState, uint32_t &nExtraNonce2, c
 {
     EhDevice<EquihashType> devStore;
     auto eh = EquihashSolver<EquihashType::WN, EquihashType::WK>();
-    if (!devStore.allocate_memory())
-    {
-        cerr << "Failed to allocate CUDA memory for Equihash solver" << endl;
-        return 0;
-    }    
 
     vector<typename EquihashType::solution_type> vHostSolutions;
     uint32_t nTotalSolutionCount = 0;

@@ -26,6 +26,18 @@
 
 using namespace std;
 
+template <typename EquihashType>
+__constant__ uint32_t HashWordOffsets[EquihashType::WK];
+
+template <typename EquihashType>
+__constant__ uint64_t HashCollisionMasks[EquihashType::WK];
+
+template<typename EquihashType>
+__constant__ uint32_t HashBitOffsets[EquihashType::WK];
+
+template<typename EquihashType>
+__constant__ uint32_t XoredHashBitOffsets[EquihashType::WK];
+
 // Get the number of available CUDA devices
 int getNumCudaDevices()
 {
@@ -43,13 +55,24 @@ int getMaxThreadsPerBlock(int deviceId)
 }
 
 template<typename EquihashType>
-__constant__ uint32_t CudaEquihashConstants<EquihashType>::d_HashWordOffsets[EquihashType::WK];
+EhDevice<EquihashType>::EhDevice()
+{
+    if (!allocate_memory())
+        throw runtime_error("Failed to allocate CUDA memory for Equihash solver");
 
-template<typename EquihashType>
-__constant__ uint32_t CudaEquihashConstants<EquihashType>::d_HashBitOffsets[EquihashType::WK];
+    // Copy the constants to the device
+    cudaMemcpyToSymbol(HashWordOffsets<EquihashType>, EquihashType::HashWordOffsets.data(), 
+                    EquihashType::WK * sizeof(uint32_t));
 
-template<typename EquihashType>
-__constant__ uint64_t CudaEquihashConstants<EquihashType>::d_HashCollisionMasks[EquihashType::WK];
+    cudaMemcpyToSymbol(HashCollisionMasks<EquihashType>, EquihashType::HashCollisionMasks.data(),
+                    EquihashType::WK * sizeof(uint64_t));
+
+    cudaMemcpyToSymbol(HashBitOffsets<EquihashType>, EquihashType::HashBitOffsets.data(),
+                    EquihashType::WK * sizeof(uint32_t));
+
+    cudaMemcpyToSymbol(XoredHashBitOffsets<EquihashType>, EquihashType::XoredHashBitOffsets.data(),
+                    EquihashType::WK * sizeof(uint32_t));
+}
 
 template<typename EquihashType>
 bool EhDevice<EquihashType>::allocate_memory()
@@ -98,6 +121,42 @@ void calculateGridAndBlockDims(dim3& gridDim, dim3& blockDim, size_t nHashes, in
 
     blockDim.x = min(nThreadsPerHash, nMaxThreadsPerBlock);
     gridDim.x = (nBlocks + blockDim.x - 1) / blockDim.x;
+}
+
+
+template<typename EquihashType>
+__device__ void ExpandArray(const uint8_t* in, size_t nInBytesLen, uint32_t* out, const size_t nOutWords, size_t nBitsLength)
+{
+    assert(nBitsLength >= 8);
+    assert(8 * sizeof(uint32_t) >= 7 + nBitsLength);
+
+    size_t out_bytes_per_element = (nBitsLength + 7) / 8;
+    assert(nOutWords == out_bytes_per_element * nInBytesLen * 8 / nBitsLength);
+
+    uint32_t bit_len_mask = ((uint32_t)1 << nBitsLength) - 1;
+    size_t acc_bits = 0;
+    uint32_t acc_value = 0;
+    size_t out_word_index = 0;
+
+    for (size_t in_byte_index = 0; in_byte_index < nInBytesLen; in_byte_index++)
+    {
+        acc_value = (acc_value << 8) | in[in_byte_index];
+        acc_bits += 8;
+
+        if (acc_bits >= nBitsLength)
+        {
+            acc_bits -= nBitsLength;
+            if (out_word_index < nOutWords)
+                out[out_word_index++] = (acc_value >> acc_bits) & bit_len_mask;
+        }
+    }
+
+    // Zero out any remaining bits in the last word
+    if (EquihashType::HashPartialBytesLeft > 0 && out_word_index < nOutWords)
+    {
+        uint32_t mask = ((uint32_t)1 << (EquihashType::HashPartialBytesLeft * 8)) - 1;
+        out[out_word_index] &= mask;
+    }
 }
 
 __forceinline__ __device__ bool atomicCheckAndIncrement(uint32_t* address, const uint32_t limit, uint32_t *oldValue)
@@ -287,23 +346,24 @@ __forceinline__ __device__ bool haveDistinctCollisionIndices(const uint32_t idx1
 }
 
 template <typename EquihashType>
-__device__ int compare_hashes(const uint32_t* x, const uint32_t* y)
+__device__ int compareHashes(const uint32_t* x, const uint32_t* y, const uint32_t currentRound)
 {
-    uint64_t x64 = (static_cast<uint64_t>(x[1]) << 32) | x[0];
-    uint64_t y64 = (static_cast<uint64_t>(y[1]) << 32) | y[0];
-    uint32_t curWordOffset = 0; 
-    for (size_t round = 0; round < EquihashType::WK; ++round)
+    uint64_t x64 = 0;
+    uint64_t y64 = 0;
+    uint32_t curWordOffset = uint32_t(-1); 
+    for (uint32_t round = currentRound + 1; round < EquihashType::WK; ++round)
     {
-        if (EquihashType::HashWordOffsets[round] > curWordOffset)
+        if (HashWordOffsets<EquihashType>[round] != curWordOffset)
         {
-            curWordOffset = EquihashType::HashWordOffsets[round];
+            curWordOffset = HashWordOffsets<EquihashType>[round];
             x64 = (static_cast<uint64_t>(x[curWordOffset + 1]) << 32) | x[curWordOffset];
             y64 = (static_cast<uint64_t>(y[curWordOffset + 1]) << 32) | y[curWordOffset];
         }
-        const uint32_t rx = x64 & EquihashType::HashCollisionMasks[round];
-        const uint32_t ry = y64 & EquihashType::HashCollisionMasks[round];
+        const uint64_t collisionMask = HashCollisionMasks<EquihashType>[round];
+        const uint64_t rx = x64[0] & collisionMask;
+        const uint64_t ry = y64[0] & collisionMask;
 
-        if (rx != rx)
+        if (rx != ry)
         {
             // Return the difference of the first differing bits, ensuring the sign is correct
             return (rx > ry) ? 1 : -1;
@@ -433,8 +493,8 @@ __global__ void cudaKernel_processCollisions(
                     // hash index format: [BBBB BBBB BBBB BBBB] [NNNN NNNN NNNN NNNN]
                     // B = bucket index, N = collision pair index
                     bucketHashIndicesPtr[xoredBucketHashIdxStorage] = (bucketIdx << 16) | collisionPairIdx;
-                    if (compare_hashes<EquihashType>(hashes + hashWordIdxLeft, hashes + hashWordIdxRight) < 0)
-                       collisionPairsPtr[collisionPairIdx] = (rightPairIdx << 16) | stack[i];
+                    if (compareHashes<EquihashType>(hashes + hashWordIdxLeft, hashes + hashWordIdxRight, round) < 0)
+                        collisionPairsPtr[collisionPairIdx] = (rightPairIdx << 16) | stack[i];
                     else
                         collisionPairsPtr[collisionPairIdx] = (stack[i] << 16) | rightPairIdx;
                     collisionCounters[bucketIdx] += 1;
