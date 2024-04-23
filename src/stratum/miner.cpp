@@ -50,6 +50,11 @@ uint32_t miningLoop(const blake2b_state& initialState, uint32_t &nExtraNonce2, c
         for (const auto& solution : vHostSolutions)
         {
             memcpy(vSolution.data(), &solution.indices, sizeof(solution.indices));
+            string s;
+            for (auto i : vSolution)
+                s += to_string(i) + " ";
+            cout << "new solution indices:" << s << endl;
+
             solutionMinimal = GetMinimalFromIndices(vSolution, EquihashType::CollisionBitLength);
             if (!eh.IsValidSolution(sError, currState, solutionMinimal))
             {

@@ -360,8 +360,8 @@ __device__ int compareHashes(const uint32_t* x, const uint32_t* y, const uint32_
             y64 = (static_cast<uint64_t>(y[curWordOffset + 1]) << 32) | y[curWordOffset];
         }
         const uint64_t collisionMask = HashCollisionMasks<EquihashType>[round];
-        const uint64_t rx = x64[0] & collisionMask;
-        const uint64_t ry = y64[0] & collisionMask;
+        const uint64_t rx = x64 & collisionMask;
+        const uint64_t ry = y64 & collisionMask;
 
         if (rx != ry)
         {
@@ -493,10 +493,7 @@ __global__ void cudaKernel_processCollisions(
                     // hash index format: [BBBB BBBB BBBB BBBB] [NNNN NNNN NNNN NNNN]
                     // B = bucket index, N = collision pair index
                     bucketHashIndicesPtr[xoredBucketHashIdxStorage] = (bucketIdx << 16) | collisionPairIdx;
-                    if (compareHashes<EquihashType>(hashes + hashWordIdxLeft, hashes + hashWordIdxRight, round) < 0)
-                        collisionPairsPtr[collisionPairIdx] = (rightPairIdx << 16) | stack[i];
-                    else
-                        collisionPairsPtr[collisionPairIdx] = (stack[i] << 16) | rightPairIdx;
+                    collisionPairsPtr[collisionPairIdx] = (rightPairIdx << 16) | stack[i];
                     collisionCounters[bucketIdx] += 1;
                 }
                 stack[stackSize++] = rightPairIdx;
@@ -663,11 +660,47 @@ __global__ void cudaKernel_findSolutions(
         printf("Found solution [%u] \n", mainIndex);
 
         // map to the original indices
-        for (uint32_t i = 0; i < EquihashType::ProofSize; ++i)
+        for (uint32_t i = 0; i < EquihashType::ProofSize; i += 2)
         {
-            const auto idx = pIndices[i];
-            const auto storageIdx = (idx >> 16) * EquihashType::NBucketSizeExtra + (idx & 0xFFFF);
-            solutions[nSolutionCount].indices[i] = bucketHashIndices[storageIdx];
+            const auto idx1 = pIndices[i];
+            const auto storageIdx1 = (idx1 >> 16) * EquihashType::NBucketSizeExtra + (idx1 & 0xFFFF);
+            const auto newIndex1 = bucketHashIndices[storageIdx1];
+            const auto idx2 = pIndices[i + 1];
+            const auto storageIdx2 = (idx2 >> 16) * EquihashType::NBucketSizeExtra + (idx2 & 0xFFFF);
+            const auto newIndex2 = bucketHashIndices[storageIdx2];
+            if (newIndex1 < newIndex2)
+            {
+                solutions[nSolutionCount].indices[i] = newIndex1;
+                solutions[nSolutionCount].indices[i + 1] = newIndex2;
+            } else {
+                solutions[nSolutionCount].indices[i] = newIndex2;
+                solutions[nSolutionCount].indices[i + 1] = newIndex1;
+            }
+        }
+        // sort the indices in the solution
+        for (uint32_t i = 0; i < EquihashType::ProofSize; i += 2)
+        {
+            uint32_t minIndex = i;
+            uint32_t minIndexValue = solutions[nSolutionCount].indices[i];
+            for (uint32_t j = i + 2; j < EquihashType::ProofSize; j += 2)
+            {
+                const uint32_t testIndexValue = solutions[nSolutionCount].indices[j];
+                if (testIndexValue < minIndexValue)
+                {
+                    minIndex = j;
+                    minIndexValue = testIndexValue;
+                }
+            }
+
+            if (minIndex != i)
+            {
+                const uint32_t temp = solutions[nSolutionCount].indices[i];
+                solutions[nSolutionCount].indices[i] = solutions[nSolutionCount].indices[minIndex];
+                solutions[nSolutionCount].indices[minIndex] = temp;
+                const uint32_t temp2 = solutions[nSolutionCount].indices[i + 1];
+                solutions[nSolutionCount].indices[i + 1] = solutions[nSolutionCount].indices[minIndex + 1];
+                solutions[nSolutionCount].indices[minIndex + 1] = temp2;
+            }
         }
         if (++nSolutionCount >= maxSolutionCount)
             break;
