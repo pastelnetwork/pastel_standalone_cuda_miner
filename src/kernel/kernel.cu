@@ -678,30 +678,44 @@ __global__ void cudaKernel_findSolutions(
             }
         }
         // sort the indices in the solution
-        for (uint32_t i = 0; i < EquihashType::ProofSize; i += 2)
+        for (uint32_t groupSize = 2; groupSize < EquihashType::ProofSize; groupSize *= 2)
         {
-            uint32_t minIndex = i;
-            uint32_t minIndexValue = solutions[nSolutionCount].indices[i];
-            for (uint32_t j = i + 2; j < EquihashType::ProofSize; j += 2)
+            for (uint32_t i = 0; i < EquihashType::ProofSize; i += groupSize*2)
             {
-                const uint32_t testIndexValue = solutions[nSolutionCount].indices[j];
-                if (testIndexValue < minIndexValue)
+                if (solutions[nSolutionCount].indices[i] < solutions[nSolutionCount].indices[i + groupSize])
+                    continue;
+                for (uint32_t j = i; j < i + groupSize; ++j)
                 {
-                    minIndex = j;
-                    minIndexValue = testIndexValue;
+                    const uint32_t temp = solutions[nSolutionCount].indices[j];
+                    solutions[nSolutionCount].indices[j] = solutions[nSolutionCount].indices[j + groupSize];
+                    solutions[nSolutionCount].indices[j + groupSize] = temp;
                 }
             }
-
-            if (minIndex != i)
-            {
-                const uint32_t temp = solutions[nSolutionCount].indices[i];
-                solutions[nSolutionCount].indices[i] = solutions[nSolutionCount].indices[minIndex];
-                solutions[nSolutionCount].indices[minIndex] = temp;
-                const uint32_t temp2 = solutions[nSolutionCount].indices[i + 1];
-                solutions[nSolutionCount].indices[i + 1] = solutions[nSolutionCount].indices[minIndex + 1];
-                solutions[nSolutionCount].indices[minIndex + 1] = temp2;
-            }
         }
+        // for (uint32_t i = 0; i < EquihashType::ProofSize; i += 2)
+        // {
+        //     uint32_t minIndex = i;
+        //     uint32_t minIndexValue = solutions[nSolutionCount].indices[i];
+        //     for (uint32_t j = i + 2; j < EquihashType::ProofSize; j += 2)
+        //     {
+        //         const uint32_t testIndexValue = solutions[nSolutionCount].indices[j];
+        //         if (testIndexValue < minIndexValue)
+        //         {
+        //             minIndex = j;
+        //             minIndexValue = testIndexValue;
+        //         }
+        //     }
+
+        //     if (minIndex != i)
+        //     {
+        //         const uint32_t temp = solutions[nSolutionCount].indices[i];
+        //         solutions[nSolutionCount].indices[i] = solutions[nSolutionCount].indices[minIndex];
+        //         solutions[nSolutionCount].indices[minIndex] = temp;
+        //         const uint32_t temp2 = solutions[nSolutionCount].indices[i + 1];
+        //         solutions[nSolutionCount].indices[i + 1] = solutions[nSolutionCount].indices[minIndex + 1];
+        //         solutions[nSolutionCount].indices[minIndex + 1] = temp2;
+        //     }
+        // }
         if (++nSolutionCount >= maxSolutionCount)
             break;
     }
