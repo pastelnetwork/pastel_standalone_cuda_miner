@@ -73,6 +73,11 @@ static inline uint64_t load64(const void *src)
     return w;
 }
 
+static inline void store32(void *dst, uint32_t w)
+{
+    memcpy(dst, &w, sizeof w);
+}
+
 static inline void store64(void *dst, uint64_t w)
 {
     memcpy(dst, &w, sizeof w);
@@ -128,11 +133,8 @@ static void blake2b_compress(blake2b_state *state, const uint8_t *block)
     uint64_t m[16];
     uint64_t v[16];
 
-    for (size_t i = 0; i < 16; ++i)
-        m[i] = load64(block + i * sizeof(m[i]));
-
-    for (size_t i = 0; i < 8; ++i)
-        v[i] = state->h[i];
+    memcpy(m, block, sizeof(m));
+    memcpy(v, state->h, sizeof(v));
 
     v[8] = blake2b_IV[0];
     v[9] = blake2b_IV[1];
@@ -149,7 +151,7 @@ static void blake2b_compress(blake2b_state *state, const uint8_t *block)
     ROUND(9); ROUND(10); ROUND(11);
 
     for (size_t i = 0; i < 8; ++i)
-        state->h[i] = state->h[i] ^ v[i] ^ v[i + 8];
+        state->h[i] ^= v[i] ^ v[i + 8];
 }
 
 static inline void blake2b_increment_counter(blake2b_state *state, const uint64_t inc)
@@ -215,7 +217,7 @@ bool blake2b_init_salt_personal_host(blake2b_state* state,
     P.key_length = nKeyLength;
     P.fanout = 1;
     P.depth = 1;
-    store64(P.leaf_length, 0);
+    store32(P.leaf_length, 0);
     store64(P.node_offset, 0);
     P.node_depth = 0;
     P.inner_length = 0;
@@ -234,7 +236,12 @@ bool blake2b_init_salt_personal_host(blake2b_state* state,
     blake2b_init_param(state, &P);
 
     if (key && nKeyLength)
-        blake2b_update_host(state, key, nKeyLength);
+    {
+        uint8_t block[BLAKE2B_BLOCKBYTES];
+        memset(block, 0, BLAKE2B_BLOCKBYTES);
+        memcpy(block, key, nKeyLength); /* key and keylen cannot be 0 */
+        blake2b_update_host(state, block, BLAKE2B_BLOCKBYTES);
+    }
 
     return true;
 }

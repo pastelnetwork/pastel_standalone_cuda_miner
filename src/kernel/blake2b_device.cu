@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://www.opensource.org/licenses/mit-license.php.
 #include <cassert>
+#include <cstdio>
 
 #include <src/kernel/memutils.h>
 #include <blake2b.h>
@@ -126,7 +127,6 @@ __device__ bool blake2b_init_device(blake2b_state *state, size_t outlen)
     state->f[0] = 0;
     state->f[1] = 0;
     state->buflen = 0;
-    state->outlen = outlen;
     state->last_node = 0;
     return true;
 }
@@ -136,11 +136,8 @@ __device__ void blake2b_compress_device(blake2b_state *state, const uint8_t *blo
     uint64_t m[16];
     uint64_t v[16];
 
-    for (int i = 0; i < 16; ++i)
-        m[i] = load64(block + i * sizeof(m[i]));
-
-    for (int i = 0; i < 8; ++i)
-        v[i] = state->h[i];
+    memcpy(m, block, sizeof(m));
+    memcpy(v, state->h, sizeof(v));
 
     v[8] = blake2b_IV[0];
     v[9] = blake2b_IV[1];

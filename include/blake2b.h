@@ -16,15 +16,15 @@ constexpr size_t BLAKE2B_PERSONALBYTES = 16;
 #elif defined(__GNUC__) || defined(__clang__)
 #pragma pack(1)
 #endif
+
 // blake2b_state struct
 typedef struct blake2b_state_
 {
-    uint64_t h[8]; // 32 bytes
+    uint64_t h[8]; // 64 bytes
     uint64_t t[2]; // 16 bytes
     uint64_t f[2]; // 16 bytes
-    uint8_t  buf[BLAKE2B_BLOCKBYTES]; // 128 bytes
+    uint8_t  buf[2 * BLAKE2B_BLOCKBYTES]; // 256 bytes
     size_t   buflen; // 8 bytes 
-    size_t   outlen; // 8 bytes
     uint8_t  last_node; // 1 byte 
 } blake2b_state;
 

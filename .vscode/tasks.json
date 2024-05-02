@@ -42,6 +42,28 @@
             }
         },
         {
+            "type": "shell",
+            "label": "Profile with Nsight Compute",
+            "command": "ncu --target-processes all --set full -o profile.nsys  ${workspaceFolder}/build/pastel_miner_gtest",
+            "problemMatcher": [],
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "detail": "Profile with Nsight Compute"
+        },
+        {
+            "type": "shell",
+            "label": "Analyze with CUDA Compute Sanitizer",
+            "command": "compute-sanitizer --tool memcheck --log-file sanitizer-output.txt ${workspaceFolder}/build/pastel_miner_gtest",
+            "problemMatcher": [],
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "detail": "Analyze with CUDA Compute Sanitizer"
+        },
+        {
             "type": "cppbuild",
             "label": "C/C++: g++ build active file",
             "command": "/usr/bin/g++",
