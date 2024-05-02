@@ -60,6 +60,9 @@ uint32_t miningLoop(const blake2b_state& initialState, uint32_t &nExtraNonce2, c
             {
                 cerr << "Invalid solution: " << sError << endl;
                 continue;
+            } else
+            {
+                cout << "Valid solution" << endl;
             }
 
             string sHexSolution = HexStr(solutionMinimal);
@@ -103,3 +106,7 @@ void miner(CStratumClient &client)
 
     miningLoop<eh_type>(state, nExtraNonce2, HexStr(client.getTime()), 1, threadsPerBlock, generateNonceFn, submitSolutionFn);
 }
+
+template uint32_t miningLoop<EquihashSolver<200, 9>>(const blake2b_state& initialState, uint32_t &nExtraNonce2, const string &sTime,
+                    const size_t nIterations, const uint32_t threadsPerBlock,
+                    const funcGenerateNonce_t &genNonceFn, const funcSubmitSolution_t &submitSolutionFn);

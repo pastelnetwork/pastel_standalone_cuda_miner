@@ -7,7 +7,7 @@
             "command": "mkdir -p ${workspaceFolder}/build",
             "problemMatcher": []
         },
-       {
+        {
             "label": "Build CUDA project: cmake build",
             "type": "cmake",
             "command": "build",
@@ -41,7 +41,7 @@
                 "panel": "shared"
             }
         },
-         {
+        {
             "type": "cppbuild",
             "label": "C/C++: g++ build active file",
             "command": "/usr/bin/g++",
@@ -61,7 +61,18 @@
                 "$gcc"
             ],
             "group": "build",
-            "detail": "compiler: /usr/bin/g++",
+            "detail": "compiler: /usr/bin/g++"
+        },
+        {
+            "type": "cmake",
+            "label": "CMake: build",
+            "command": "build",
+            "targets": [
+                "all"
+            ],
+            "group": "build",
+            "problemMatcher": [],
+            "detail": "CMake template build task"
         }
     ]
 }

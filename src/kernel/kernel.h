@@ -59,8 +59,8 @@ public:
     std::unique_ptr<uint32_t, CudaDeleter> collisionCounters;    // NBucketCount
     v_uint32 vCollisionCounters;                                 // NBucketCount
 
-    std::unique_ptr<typename EquihashType::solution_type, CudaDeleter> solutions; // MAXSOLUTIONS
-    std::unique_ptr<uint32_t, CudaDeleter> solutionCount;        // 1
+    std::unique_ptr<typename EquihashType::solution_type, CudaDeleter> solutions; // MaxSolutions
+    std::unique_ptr<uint32_t, CudaDeleter> solutionCount;
 
     uint32_t round = 0;
 
@@ -69,11 +69,10 @@ public:
 
     void copySolutionsToHost(std::vector<typename EquihashType::solution_type>& vHostSolutions);
     void debugWriteSolutions(const std::vector<typename EquihashType::solution_type>& vHostSolutions);
-    void debugTraceSolution(const uint32_t bucketIdx);
-
+    
     static inline constexpr uint32_t ThreadsPerBlock = 256;
     static inline constexpr uint32_t MaxCollisionsPerBucket = 10'000;
-    static inline constexpr uint32_t MaxSolutions = 100;
+    static inline constexpr uint32_t MaxSolutions = 20;
 
 private:
     void generateInitialHashes();

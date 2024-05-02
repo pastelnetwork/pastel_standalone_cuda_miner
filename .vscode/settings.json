@@ -148,4 +148,5 @@
     "CUDACXX": "nvcc",
     "CMAKE_GENERATOR": "Unix Makefiles",
   },
+  "debug.inlineValues": "on",
 }
