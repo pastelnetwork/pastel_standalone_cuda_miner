@@ -81,15 +81,20 @@ public:
     // the total number of hashes words required for the equihash algorithm
     static inline constexpr uint32_t NHashWords = NHashes * HashWords; // 14'680'064
     static inline constexpr uint32_t NBucketCount = 2'048;
+    static inline constexpr uint32_t NBucketCountStorageSize = NBucketCount * sizeof(uint32_t);
     static inline constexpr uint32_t NExtraHashesPerBucket = 126;
     static inline constexpr uint32_t NBucketSize = (NHashes + NBucketCount - 1) / NBucketCount; // 1'024
     static inline constexpr uint32_t NBucketSizeExtra = NBucketSize + NExtraHashesPerBucket; // 1'150
+    static inline constexpr uint32_t NBucketSizeExtraBoolMaskSize = NBucketSizeExtra * sizeof(bool);
     static inline constexpr uint32_t NBucketIdxBits = COUNT_BITS(NBucketCount - 1); // 11
     static inline constexpr uint32_t NBucketIdxMask = NBucketCount - 1; // 2'047
+    static inline constexpr uint32_t CollisionThreadsPerBlock = 256;
     static inline constexpr uint32_t NCollisionIndexBits = 11;
     static inline constexpr uint32_t NCollisionIndexBitMask = (1 << NCollisionIndexBits) - 1; // 2'047
     static inline constexpr uint32_t NHashStorageCount = NBucketCount * NBucketSizeExtra; // 2'048 * 1'150 = 2'355'200
     static inline constexpr uint32_t NHashStorageWords = NBucketCount * NBucketSizeExtra * HashWords; // 2'330'200 * 7 = 16'486'400
+
+    // __shared__ uint64_t sharedProcessed[threadsPerBlock * maskArraySize];
 
     using solution_type = struct
     {

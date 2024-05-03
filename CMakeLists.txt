@@ -71,7 +71,7 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
 		"$<$<COMPILE_LANGUAGE:CUDA>:-G>")
 elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
 	target_compile_options(pastel_miner_gtest PRIVATE 
-		"$<$<COMPILE_LANGUAGE:CUDA>:>")
+		"$<$<COMPILE_LANGUAGE:CUDA>:-O3>")
 endif()
 
 # Set target properties, if needed (e.g., C++ standard, CUDA architectures)
