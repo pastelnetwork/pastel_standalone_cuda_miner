@@ -25,3 +25,11 @@ std::unique_ptr<T, CudaDeleter> make_cuda_unique_2d(const size_t rowSize, const 
 void copyToDevice(void* dst, const void* src, const size_t size);
 void copyToHost(void* dst, const void* src, const size_t size);
 
+class Cuda3dArrayBase
+{
+public:
+    virtual void createTextureObject() = 0;
+    virtual void createSurfaceObject() = 0;
+    virtual uint64_t getTextureObject() const = 0;
+    virtual uint64_t getSurfaceObject() const = 0;
+};

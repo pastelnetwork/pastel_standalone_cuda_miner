@@ -44,7 +44,7 @@
         {
             "type": "shell",
             "label": "Profile with Nsight Compute",
-            "command": "ncu --target-processes all --set full -o profile.nsys  ${workspaceFolder}/build/pastel_miner_gtest",
+            "command": "sudo /opt/nvidia/nsight-compute/2023.1.1/ncu --target-processes all --set full -o profile.nsys  ${workspaceFolder}/build/pastel_miner_gtest",
             "problemMatcher": [],
             "group": {
                 "kind": "test",

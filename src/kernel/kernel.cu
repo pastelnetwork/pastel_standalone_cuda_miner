@@ -159,29 +159,6 @@ __device__ void ExpandArray(const uint8_t* in, size_t nInBytesLen, uint32_t* out
     }
 }
 
-__forceinline__ __device__ bool atomicCheckAndIncrement(uint32_t* address, const uint32_t limit, uint32_t *oldValue)
-{
-    uint32_t old = *address;
-    uint32_t assumed;
-
-    do {
-        assumed = old;
-        if (assumed >= limit)
-        {
-            if (oldValue)
-                *oldValue = assumed; // Write the old value back through the pointer
-
-            return false; // Indicate that we did not increment because it's at/above the limit
-        }
-
-        old = atomicCAS(address, assumed, assumed + 1);
-    } while (assumed != old);
-
-    if (oldValue)
-        *oldValue = assumed; // Successfully incremented, write the old value back
-    return true; // Indicate success
-}
-
 // CUDA kernel to generate initial hashes from blake2b state
 template<typename EquihashType>
 __global__ void cudaKernel_generateInitialHashes(const blake2b_state* state, uint32_t* hashes, 
@@ -211,10 +188,11 @@ __global__ void cudaKernel_generateInitialHashes(const blake2b_state* state, uin
                 (static_cast<uint16_t>(hash[hashByteOffset + 1]) << 8 |
                                        hash[hashByteOffset]) & EquihashType::NBucketIdxMask;
             
-            uint32_t hashIdxInBucket = 0;
-            if (!atomicCheckAndIncrement(&bucketHashCounters[bucketIdx], EquihashType::NBucketSizeExtra - 1, &hashIdxInBucket))
+            const uint32_t hashIdxInBucket = atomicAdd(&bucketHashCounters[bucketIdx], 1);
+            if (hashIdxInBucket >= EquihashType::NBucketSizeExtra)
             {
                 atomicAdd(discardedCounter, 1);
+                atomicSub(&bucketHashCounters[bucketIdx], 1);
                 continue;
             }
             // find the place where to store the hash (extra space exists in each bucket)
@@ -379,7 +357,8 @@ __global__ void cudaKernel_processCollisions(
     const auto bucketHashIndicesPrevPtr = bucketHashIndices + round * EquihashType::NHashStorageCount;
     auto bucketHashIndicesPtr = bucketHashIndices + (round + 1) * EquihashType::NHashStorageCount;
     auto bucketHashCountersPtr = bucketHashCounters + (round + 1) * EquihashType::NBucketCount;
-    bool processed[EquihashType::NBucketSizeExtra] = { false };
+    bool processed[EquihashType::NBucketSizeExtra];
+    memset(processed, 0, EquihashType::NBucketSizeExtra * sizeof(bool));
     uint32_t stackCapacity = 20;
     uint32_t *stack = nullptr;
     cudaMalloc(&stack, stackCapacity * sizeof(uint32_t));    
@@ -458,10 +437,14 @@ __global__ void cudaKernel_processCollisions(
 
                         xoredHashIdxInBucket = atomicAdd(&bucketHashCountersPtr[0], 1);
                     }
-                    else if (!atomicCheckAndIncrement(&bucketHashCountersPtr[xoredBucketIdx], EquihashType::NBucketSizeExtra - 1, &xoredHashIdxInBucket))
-                    {
-                        atomicAdd(discardedCounter, 1);
-                        continue; // skip if the bucket is full
+                    else {
+                        xoredHashIdxInBucket = atomicAdd(&bucketHashCountersPtr[xoredBucketIdx], 1);
+                        if (xoredHashIdxInBucket >= EquihashType::NBucketSizeExtra)
+                        {
+                            atomicAdd(discardedCounter, 1);
+                            atomicSub(&bucketHashCountersPtr[xoredBucketIdx], 1);
+                            continue; // skip if the bucket is full
+                        }
                     }
                     const uint32_t xoredBucketHashIdxStorage = xoredBucketIdx * EquihashType::NBucketSizeExtra + xoredHashIdxInBucket;
                     const uint32_t xoredBucketHashIdxStoragePtr = xoredBucketHashIdxStorage * EquihashType::HashWords;

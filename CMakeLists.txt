@@ -68,7 +68,7 @@ target_include_directories(pastel_miner_gtest PRIVATE include/ ${CMAKE_SOURCE_DI
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
 	target_compile_options(pastel_miner_gtest PRIVATE 
-		"$<$<COMPILE_LANGUAGE:CUDA>:-G;-lineinfo>")
+		"$<$<COMPILE_LANGUAGE:CUDA>:-G>")
 elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
 	target_compile_options(pastel_miner_gtest PRIVATE 
 		"$<$<COMPILE_LANGUAGE:CUDA>:>")

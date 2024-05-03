@@ -47,26 +47,28 @@ uint32_t miningLoop(const blake2b_state& initialState, uint32_t &nExtraNonce2, c
         v_uint32 vSolution;
         vSolution.resize(EquihashType::ProofSize);
         string sError;
+        size_t num = 1;
         for (const auto& solution : vHostSolutions)
         {
             memcpy(vSolution.data(), &solution.indices, sizeof(solution.indices));
-            string s;
-            for (auto i : vSolution)
-                s += to_string(i) + " ";
-            cout << "new solution indices:" << s << endl;
+            // string s;
+            // for (auto i : vSolution)
+            //     s += to_string(i) + " ";
+            // cout << "new solution indices:" << s << endl;
 
             solutionMinimal = GetMinimalFromIndices(vSolution, EquihashType::CollisionBitLength);
             if (!eh.IsValidSolution(sError, currState, solutionMinimal))
             {
-                cerr << "Invalid solution: " << sError << endl;
+                cerr << dec << num << ": invalid solution: " << sError << endl;
                 continue;
             } else
             {
-                cout << "Valid solution" << endl;
+                cout << strprintf("%zu: valid solution", num) << endl;
             }
 
             string sHexSolution = HexStr(solutionMinimal);
             submitSolutionFn(nExtraNonce2, sTime, nonce.GetHex(), sHexSolution);
+            ++num;
         }
 
         ++nExtraNonce2;
