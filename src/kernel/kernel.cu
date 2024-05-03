@@ -359,9 +359,7 @@ __global__ void cudaKernel_processCollisions(
     auto bucketHashCountersPtr = bucketHashCounters + (round + 1) * EquihashType::NBucketCount;
     bool processed[EquihashType::NBucketSizeExtra];
     memset(processed, 0, EquihashType::NBucketSizeExtra * sizeof(bool));
-    uint32_t stackCapacity = 20;
-    uint32_t *stack = nullptr;
-    cudaMalloc(&stack, stackCapacity * sizeof(uint32_t));    
+    uint32_t stack[20];
     uint32_t stackSize = 0;
 
     //uint64_t start, stop;
@@ -402,7 +400,7 @@ __global__ void cudaKernel_processCollisions(
                     // hash collision found - xor the hashes and store the result
                     bool bAllZeroes = true;
                     const uint32_t hashBase = (startIdxStorage + stack[i]) * EquihashType::HashWords;
-                    for (uint32_t j = 0; j < EquihashType::HashWords; ++j)
+                    for (uint32_t j = wordOffset; j < EquihashType::HashWords; ++j)
                     {
                         xoredHash[j] = hashes[hashBase + j] ^ hashes[hashIdxRight + j];
                         if (xoredHash[j])
@@ -459,20 +457,9 @@ __global__ void cudaKernel_processCollisions(
                     collisionCounters[bucketIdx] += 1;
                 }
                 stack[stackSize++] = rightPairIdx;
-                if (stackSize >= stackCapacity)
-                {
-                    stackCapacity *= 2;
-                    uint32_t *newStack;
-                    cudaMalloc(&newStack, stackCapacity * sizeof(uint32_t));
-                    memcpy(newStack, stack, stackSize * sizeof(uint32_t));
-                    cudaFree(stack);
-                    stack = newStack;
-                }
             }
         }
     }
-    // if (stack != initialStack)
-    //     cudaFree(stack);
     //atomicAdd(&atomicCheckAndIncrementTimeHigh, static_cast<uint32_t>(localAtomicTime >> 32));
     //atomicAdd(&atomicCheckAndIncrementTimeLow, static_cast<uint32_t>(localAtomicTime));
 }
