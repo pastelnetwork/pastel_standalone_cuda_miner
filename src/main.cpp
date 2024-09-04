@@ -15,19 +15,25 @@
 #include <sstream>
 #include <ctime>
 
-
 #include <src/equihash/block.h>
 #include <src/stratum/client.h>
+#include <src/utils/svc_thread.h>
 
 using namespace std;
+
+#ifdef __MINGW64__
+__thread CServiceThread *funcThreadObj;
+#else
+thread_local CServiceThread* funcThreadObj = nullptr;
+#endif
 
 // Main program
 int main()
 {
     cout << "Pastel CUDA Equihash Miner" << endl;
 
-    CStratumClient client("144.126.137.164", 1234);
-    client.setAuthInfo("Pastel-Miner", "test_pswd");
+    CStratumClient client("kobrin.ddns.net", 3255);
+    client.setAuthInfo("44oKGrJQs2DZDR4oHW3172i2umSwpRP49skh.miner", "passw0rd123");
 
     srand(time(0));
 

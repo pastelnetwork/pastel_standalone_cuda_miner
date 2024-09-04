@@ -63,13 +63,12 @@ public:
  * Custom serializer for CBlockHeader that omits the nonce and solution, for use
  * as input to Equihash.
  */
-class CEquihashInput : private CBlockHeader
+class CEquihashInput : public CBlockHeader
 {
 public:
-    CEquihashInput(const CBlockHeader &header)
+    CEquihashInput() noexcept
     {
-        CBlockHeader::Clear();
-        *((CBlockHeader*)this) = header;
+        Clear();
     }
 
     ADD_SERIALIZE_METHODS;

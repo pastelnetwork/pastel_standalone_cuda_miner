@@ -23,6 +23,7 @@
 #include <src/kernel/blake2b_device.h>
 #include <src/equihash/equihash.h>
 #include <src/equihash/equihash-helper.h>
+#include <src/equihash/equihash-types.h>
 
 using namespace std;
 
@@ -1003,4 +1004,4 @@ uint32_t EhDevice<EquihashType>::solver()
 }
 
 // Explicit template instantiation
-template class EhDevice<EquihashSolver<200, 9>>;
+template class EhDevice<Eh200_9>;

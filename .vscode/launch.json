@@ -2,8 +2,8 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "C/C++ Runner: Pastel-Miner Debug Session",
-      "type": "cppdbg",
+      "name": "C/C++ Runner: Pastel-Miner CUDA  Debug Session",
+      "type": "cuda-gdb",
       "request": "launch",
       "args": [],
       "stopAtEntry": false,
@@ -11,8 +11,6 @@
       "cwd": "${workspaceFolder}",
       "program": "${workspaceFolder}/build/pastel_miner",
       "environment": [],
-      "MIMode": "gdb",
-      "miDebuggerPath": "gdb",
       "preLaunchTask": "Build CUDA project: cmake build",
       "setupCommands": [
         {

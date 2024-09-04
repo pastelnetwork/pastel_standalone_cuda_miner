@@ -121,3 +121,14 @@ static void str_split(v_strings &v, const std::string &s, const char chDelimiter
     }
     v.emplace_back(s.substr(posStart));
 }
+
+/**
+ * Returns empty sz-string in case szStr = nullptr.
+ * 
+ * \param szStr - input string or nullptr
+ * \return non-null string
+ */
+static inline const char* SAFE_SZ(const char* szStr) noexcept
+{
+    return szStr ? szStr : "";
+}

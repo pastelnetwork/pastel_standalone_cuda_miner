@@ -151,7 +151,7 @@ JsonRpcResponse JsonRpcClient::call_method(const id_type &id, const std::string 
             throw JsonRpcException(RPC_ERROR_CODE::INTERNAL, error);
 
         if (!m_responseJson.has_value())
-            throw JsonRpcException(RPC_ERROR_CODE::INTERNAL, "Json-RPC response is empty");
+            throw JsonRpcException(RPC_ERROR_CODE::INTERNAL, "Json-RPC response is empty for " + name);
 
         const json &response = *m_responseJson;
         if (json_rpc_has_key_type(response, "error", json::value_t::object))
@@ -183,13 +183,17 @@ JsonRpcNotify JsonRpcClient::ParseJsonRpcNotify(const json &j)
         throw JsonRpcException(RPC_ERROR_CODE::INVALID_REQUEST,
             "JsonRpcRequest must contain an 'id' field.");
 
-    if (j["id"].is_number_integer())
+    if (j["id"].is_null())
+    {
+        notify.id = monostate{};
+    }
+    else if (j["id"].is_number_integer())
         notify.id = j["id"].get<int>();
     else if (j["id"].is_string())
         notify.id = j["id"].get<std::string>();
     else
         throw JsonRpcException(RPC_ERROR_CODE::INVALID_REQUEST, 
-            "JsonRpcRequest 'id' field must be either integer or string.");
+            "JsonRpcRequest 'id' field must be either null, integer or string.");
 
     // Extract 'method' field
     if (!j.contains("method") || !j["method"].is_string())

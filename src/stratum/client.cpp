@@ -21,6 +21,8 @@ using json = nlohmann::json;
 
 constexpr auto POOL_RECONNECT_INTERVAL_SECS = 15s;
 
+unique_ptr<CMiningThread> gl_MiningThread;
+
 CStratumClient::CStratumClient(const std::string& sServerAddress, unsigned short nPort) :
     m_sServerAddress(sServerAddress),
     m_nPort(nPort),
@@ -151,26 +153,23 @@ bool CStratumClient::reconnect()
  * mining.submit("workerName", "job id", "ExtraNonce2", "nTime", "nOnce")
  * 
  * Parameters:
- *   workerName - the name of the worker
- *   jobId - the job ID
- *   ExtraNonce2 - the extra nonce 2 value
- *   nTime - the time value
- *   nNonce - the nonce value
+ *   [0] workerName - the name of the worker
+ *   [1] jobId - the job ID
+ *   [2] nTime - the time value
+ *   [3] ExtraNonce2 - the extra nonce 2 value
+ *   [4] solution
  * 
- * \param nExtraNonce2 
- * \param sTime 
- * \param sNonce 
- * \param sHexSolution 
- * \return true 
- * \return false 
+ * \param nExtraNonce2 - the extra nonce 2 value
+ * \param sTime - the time value
+ * \param sHexSolution - the solution in hex format
+ * \return true if the solution was accepted by the pool, false otherwise
  */
-bool CStratumClient::submitSolution(const uint32_t nExtraNonce2, const string& sTime, 
-    const string& sNonce, const string &sHexSolution)
+bool CStratumClient::submitSolution(const uint32_t nExtraNonce2, const string& sTime, const string &sHexSolution)
 {
     if (!m_bConnected)
         return false;
 
-    auto params = json::array({m_sWorkerName, m_sJobId, HexStr(nExtraNonce2), sTime, sNonce, sHexSolution});
+    auto params = json::array({m_sWorkerName, m_sJobId, sTime, HexStr(nExtraNonce2), sHexSolution});
     bool bResult = m_JsonRpcClient.CallMethod<bool>(++m_nRequestId, "mining.submit", params);
     if (bResult)
         cout << "Solution accepted by the pool" << endl;
@@ -204,9 +203,8 @@ bool CStratumClient::setDifficulty(double difficulty)
 void CStratumClient::handleMiningNotify(const JsonRpcNotify &notify)
 {
     const auto &params = notify.params;
-    if (!params.is_array())
+    if (params.is_null() || !params.is_array())
     {
-        cerr << notify.method << ": invalid parameters (not array)" << endl;
         return;
     }
     if (params.size() < 12)
@@ -277,9 +275,9 @@ void CStratumClient::handleMiningNotify(const JsonRpcNotify &notify)
         m_sPersString = DEFAULT_EQUIHASH_PERS_STRING;
 
     // mnid string parameter
-    m_blockHeader.sPastelID = params[8].get<std::string>();
+    m_blockHeader.sPastelID = params[10].get<std::string>();
     // previous merkle root signature - hex-encoded string
-    string sPrevMerkleRootSignature = params[9].get<std::string>();
+    string sPrevMerkleRootSignature = params[11].get<std::string>();
     if (!IsHex(sPrevMerkleRootSignature))
     {
         cerr << notify.method << ": invalid previous merkle root signature" << endl;
@@ -287,17 +285,25 @@ void CStratumClient::handleMiningNotify(const JsonRpcNotify &notify)
     }
     m_blockHeader.prevMerkleRootSignature = ParseHex(sPrevMerkleRootSignature);
     cout << "New job received: " << m_sJobId << endl;
+
     // start new mining job in a separate thread
-    m_miningThread = thread(&miner, ref(*this));
-    m_miningThread.detach();
+    if (gl_MiningThread && gl_MiningThread->isRunning())
+        gl_MiningThread->waitForStop();
+    gl_MiningThread = make_unique<CMiningThread>(*this);
+
+    string error;
+    if (!gl_MiningThread->start(error))
+    {
+        cerr << "Failed to start mining thread: " << error << endl;
+    }
 }
 
 v_uint8 CStratumClient::getEquihashInput() const noexcept
 {
     CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
-    const auto equihashInput = dynamic_cast<const CEquihashInput &>(m_blockHeader);
-    ss.reserve(equihashInput.GetReserveSize());
-    ss << equihashInput;
+    // calculate equihash input
+    ss.reserve(m_blockHeader.GetReserveSize());
+    ss << m_blockHeader;
     v_uint8 v;
     ss.extractData(v);
     return v;
@@ -346,7 +352,7 @@ void CStratumClient::handlingLoop()
     {
         try
         {
-            JsonRpcNotify jsonRpcNotfy = JsonRpcClient::ParseJsonRpcNotify(j);
+            const JsonRpcNotify jsonRpcNotfy = JsonRpcClient::ParseJsonRpcNotify(j);
             handleNotify(jsonRpcNotfy);
         }
         catch(const JsonRpcException& e)
@@ -357,13 +363,10 @@ void CStratumClient::handlingLoop()
 
     while (true)
     {
-        if (!m_bConnected)
+        if (!m_bConnected && !reconnect())
         {
-            if (!reconnect())
-            {
-                this_thread::sleep_for(POOL_RECONNECT_INTERVAL_SECS);
-                continue;
-            }
+            this_thread::sleep_for(POOL_RECONNECT_INTERVAL_SECS);
+            continue;
         }
 
         m_JsonRpcClient.EnterEventLoop();

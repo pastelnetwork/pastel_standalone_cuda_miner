@@ -136,7 +136,8 @@
     "shared_mutex": "cpp",
     "cfenv": "cpp",
     "any": "cpp",
-    "__config": "cpp"
+    "__config": "cpp",
+    "fstream": "cpp"
   },
   "terminal.integrated.env.linux": {
     "PATH": "/usr/local/cuda/bin:${env:PATH}",

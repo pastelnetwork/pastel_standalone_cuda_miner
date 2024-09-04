@@ -60,7 +60,7 @@ private:
     std::string err;
 };
 
-typedef std::variant<int, std::string> id_type;
+typedef std::variant<std::monostate, int, std::string> id_type;
 
 struct JsonRpcResponse
 {

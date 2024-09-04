@@ -14,12 +14,11 @@ class CStratumClient
 {
 public:
     CStratumClient(const std::string& sServerAddress, unsigned short nPort);
-    ~CStratumClient();
+    virtual ~CStratumClient();
 
     void handlingLoop();
     void setAuthInfo(const std::string& sLogin, const std::string& sPassword);
-    bool submitSolution(const uint32_t nExtraNonce2, const std::string& sTime, 
-        const std::string& sNonce, const std::string &sHexSolution);
+    bool submitSolution(const uint32_t nExtraNonce2, const std::string& sTime, const std::string &sHexSolution);
     const uint256 generateNonce(const uint32_t nExtraNonce2) noexcept;
 
     v_uint8 getEquihashInput() const noexcept;
@@ -30,7 +29,7 @@ public:
     uint256 getNonce() const noexcept { return m_blockHeader.nNonce; }
     uint32_t getTime() const noexcept { return m_blockHeader.nTime; }
 
-private:
+protected:
     JsonRpcClient m_JsonRpcClient;
 
     int m_nRequestId;
@@ -40,7 +39,7 @@ private:
     unsigned short m_nPort;
     std::string m_sWorkerName;
     std::string m_sWorkerPassword;
-    CBlockHeader m_blockHeader;
+    CEquihashInput m_blockHeader;
     bool m_bCleanJobs;
     uint32_t N;
     uint32_t K;
@@ -49,7 +48,6 @@ private:
     std::string m_sPersString;
     uint32_t m_nExtraNonce1;
     std::string m_sTarget;
-    std::thread m_miningThread;
 
     void handleNotify(const JsonRpcNotify& notify);
     void handleMiningNotify(const JsonRpcNotify& notify);

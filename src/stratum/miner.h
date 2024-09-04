@@ -8,16 +8,27 @@
 #include <vector>
 
 #include <blake2b.h>
+#include <src/equihash/equihash-types.h>
 #include <src/utils/uint256.h>
+#include <src/utils/svc_thread.h>
 #include <src/stratum/client.h>
 
-using funcGenerateNonce_t = std::function<const uint256 (uint32_t nExtraNonce2)>;
-using funcSubmitSolution_t = std::function<void(const uint32_t nExtraNonce2, const std::string& sTime, 
-        const std::string& sNonce, const std::string &sHexSolution)>;
+class CMiningThread : public CStoppableServiceThread
+{
+public:
+        using EquihashType = Eh200_9; 
 
-template<typename EquihashType>
-uint32_t miningLoop(const blake2b_state& initialState, uint32_t &nExtraNonce2, const std::string &sTime,
-                    const size_t nIterations, const uint32_t threadsPerBlock,
-                    const funcGenerateNonce_t &genNonceFn, const funcSubmitSolution_t &submitSolutionFn);
+        CMiningThread(CStratumClient &StratumClient);
 
-void miner(CStratumClient &client);
+        void execute() override;
+
+        virtual uint256 generateNonce(const uint32_t nExtraNonce2) const noexcept;
+        virtual void submitSolution(const uint32_t nExtraNonce2, const std::string& sTime, const std::string &sHexSolution);
+
+protected:
+        CStratumClient &m_StratumClient;
+
+        uint32_t miningLoop(const blake2b_state& initialState, uint32_t &nExtraNonce2, const std::string &sTime,
+                const size_t nIterations, const uint32_t threadsPerBlock);
+};
+
