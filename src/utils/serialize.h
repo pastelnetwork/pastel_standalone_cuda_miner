@@ -5,7 +5,6 @@
 
 #include <cinttypes>
 #include <cstring>
-#include <endian.h>
 #include <stdexcept>
 #include <limits>
 #include <vector>
@@ -13,6 +12,8 @@
 #include <algorithm>
 #include <memory>
 #include <ios>
+
+#include <compat/endian.h>
 
 #include <tinyformat.h>
 

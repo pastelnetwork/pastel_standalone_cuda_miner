@@ -3,16 +3,30 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#ifdef HAVE_CONFIG_H
+#include <compat/pastel-config.h>
+#endif
+
 #ifdef WIN32
 #ifdef _WIN32_WINNT
 #undef _WIN32_WINNT
 #endif
 #define _WIN32_WINNT 0x0601
+
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN 1
 #endif
+
+#ifdef _WIN32_IE
+#undef _WIN32_IE
+#endif
+#define _WIN32_IE 0x0601
+
 #ifndef NOMINMAX
 #define NOMINMAX
+#endif
+#ifndef NOGDI
+#define NOGDI
 #endif
 #ifdef FD_SETSIZE
 #undef FD_SETSIZE // prevent redefinition compiler warning
@@ -47,3 +61,4 @@
 #define THREAD_PRIORITY_ABOVE_NORMAL    (-2)
 #define THREAD_PRIORITY_HIGHEST         PRIO_MAX
 #endif
+

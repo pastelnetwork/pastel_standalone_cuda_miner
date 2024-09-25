@@ -4,7 +4,7 @@
 #pragma once
 #include <cstdint>
 #include <cstring>
-#include <endian.h>
+#include <compat/endian.h>
 
 uint16_t static inline ReadLE16(const unsigned char* ptr)
 {

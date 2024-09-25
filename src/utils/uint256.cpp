@@ -5,6 +5,7 @@
 
 #include <tinyformat.h>
 
+#include <compat/endian.h>
 #include <src/utils/uint256.h>
 #include <src/utils/strencodings.h>
 
@@ -60,6 +61,15 @@ template <unsigned int BITS>
 string base_blob<BITS>::ToString() const
 {
     return GetHex();
+}
+
+    // set Nth word in the blob
+template<unsigned int BITS>
+void base_blob<BITS>::SetUint32(size_t n, const uint32_t x) noexcept
+{
+    assert(n < WORD_SIZE);
+    uint32_t* p = reinterpret_cast<uint32_t*>(data);
+    p[n] = htole32(x);
 }
 
 uint64_t uint256::GetHash(const uint256& salt) const noexcept

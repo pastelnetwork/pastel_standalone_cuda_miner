@@ -18,13 +18,23 @@ protected:
 public:
     inline static constexpr size_t SIZE = WIDTH;
     inline static constexpr size_t STR_SIZE = WIDTH * 2;
+	inline static constexpr size_t WORD_SIZE = SIZE / 4;
 
     base_blob() noexcept
     {
         memset(data, 0, sizeof(data));
     }
 
-    explicit base_blob(const v_uint8& vch);
+    explicit base_blob(const v_uint8& vch)
+	{
+		memset(data, 0, sizeof(data));
+		if (vch.size() <= SIZE)
+#ifdef _MSC_VER
+			memcpy_s(data, sizeof(data), vch.data(), vch.size());
+#else
+			memcpy(data, vch.data(), vch.size());
+#endif
+	}
 
     base_blob(base_blob && b) noexcept
     {
@@ -124,11 +134,13 @@ public:
     }
 
     // set Nth word in the blob
-    void SetUint32(size_t n, const uint32_t x) noexcept
+    void SetUint32(size_t n, const uint32_t x) noexcept;
+
+    // Reverse the bytes in the blob
+    base_blob& Reverse() noexcept
     {
-        assert(n < WIDTH / 4);
-        uint32_t* p = reinterpret_cast<uint32_t*>(data);
-        p[n] = x;
+        std::reverse(data, data + WIDTH);
+        return *this;
     }
 };
 
@@ -234,3 +246,5 @@ inline uint256 uint256S(const std::string& str)
 
 // convert hex-encoded string to uint256 with error checking
 bool parse_uint256(std::string& error, uint256& value, const std::string &sUint256, const char *szValueDesc = nullptr);
+
+extern template class base_blob<256>;

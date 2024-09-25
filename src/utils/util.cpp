@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://www.opensource.org/licenses/mit-license.php.
 
+#include <compat.h>
 #if (defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__DragonFly__))
 #include <pthread.h>
 #include <pthread_np.h>
@@ -12,6 +13,11 @@
 #elif defined(WIN32)
 #include <fcntl.h>
 #endif
+
+#include <string>
+#include <ctime>
+#include <sstream>
+#include <iomanip>
 
 #ifndef WIN32
 // for posix_fallocate
@@ -37,22 +43,6 @@
 #include <processthreadsapi.h>
 #endif
 
-#ifdef _WIN32_WINNT
-#undef _WIN32_WINNT
-#endif
-#define _WIN32_WINNT 0x0601
-
-#ifdef _WIN32_IE
-#undef _WIN32_IE
-#endif
-#define _WIN32_IE 0x0601
-
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN 1
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
 
 #define popen _popen
 #define pclose _pclose
@@ -64,6 +54,8 @@
 #ifdef HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
 #endif
+
+using namespace std;
 
 void RenameThread(const char* szThreadName, void* pThreadNativeHandle)
 {
@@ -92,4 +84,16 @@ void RenameThread(const char* szThreadName, void* pThreadNativeHandle)
     // Prevent warnings for unused parameters...
     (void)szThreadName;
 #endif
+}
+
+bool SetupNetworking()
+{
+#ifdef WIN32
+    // Initialize Windows Sockets
+    WSADATA wsadata;
+    int ret = WSAStartup(MAKEWORD(2,2), &wsadata);
+    if (ret != NO_ERROR || LOBYTE(wsadata.wVersion ) != 2 || HIBYTE(wsadata.wVersion) != 2)
+        return false;
+#endif
+    return true;
 }

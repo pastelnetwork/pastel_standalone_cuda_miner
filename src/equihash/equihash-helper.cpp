@@ -8,6 +8,7 @@
 #include <cstring>
 
 #include <blake2b.h>
+#include <compat/endian.h>
 #include <src/equihash/equihash-types.h>
 #include <src/equihash/equihash-helper.h>
 #include <src/equihash/blake2b_host.h>
@@ -270,3 +271,4 @@ template class FullStepRow<Eh200_9::FinalFullWidth>;
 template FullStepRow<Eh200_9::FinalFullWidth>::FullStepRow(const FullStepRow<Eh200_9::FinalFullWidth>&, const FullStepRow<Eh200_9::FinalFullWidth>&, size_t, size_t, int);
 template bool HasCollision<Eh200_9::FinalFullWidth>(StepRow<Eh200_9::FinalFullWidth>& a, StepRow<Eh200_9::FinalFullWidth>& b, const size_t l);
 template bool DistinctIndices<Eh200_9::FinalFullWidth>(const FullStepRow<Eh200_9::FinalFullWidth>& a, const FullStepRow<Eh200_9::FinalFullWidth>& b, size_t len, size_t lenIndices);
+

@@ -9,13 +9,19 @@
 #include <variant>
 #include <map>
 #include <vector>
+#include <unordered_set>
 #include <exception>
+#include <condition_variable>
+#include <mutex>
+
+#include <compat.h>
 
 #include <event2/event.h>
 #include <event2/bufferevent.h>
 #include <nlohmann/json.hpp>
 
 #include <rpc_error.h>
+#include <src/utils/svc_thread.h>
 
 bool json_rpc_has_key(const nlohmann::json &v, const std::string &key);
 bool json_rpc_has_key_type(const nlohmann::json &v, const std::string &key, nlohmann::json::value_t type);
@@ -26,9 +32,11 @@ class JsonRpcException : public std::exception
 {
 public:
     JsonRpcException(RPC_ERROR_CODE code, const std::string &message) noexcept;
+	JsonRpcException(const std::string& message, const int nErrorCode) noexcept;
     JsonRpcException(RPC_ERROR_CODE code, const std::string &message, const nlohmann::json &data) noexcept;
 
     RPC_ERROR_CODE Code() const noexcept { return code; }
+	int getPoolErrorCode() const noexcept { return nCode; }
     const std::string &Message() const noexcept { return message; }
     const nlohmann::json &Data() const noexcept { return data; }
 
@@ -55,12 +63,15 @@ public:
 
 private:
     RPC_ERROR_CODE code;
+	int nCode;
     std::string message;
     nlohmann::json data;
     std::string err;
 };
 
 typedef std::variant<std::monostate, int, std::string> id_type;
+
+std::string to_string(const id_type& id);
 
 struct JsonRpcResponse
 {
@@ -75,9 +86,13 @@ struct JsonRpcRequest
     nlohmann::json params;
 };
 
-using JsonRpcNotify = JsonRpcRequest;
+struct JsonRpcNotify : JsonRpcRequest
+{
+    bool isResult = false;
+    std::string error;
+};
 
-class JsonRpcClient
+class JsonRpcClient : public CStoppableServiceThread
 {
 public:
     enum class rpcVersion { v1, v2 };
@@ -86,19 +101,20 @@ public:
 
     enum class ConnectionState
     {
-        DISCONNECTED,
-        CONNECTED,
-        TIMEOUT,
-        ERROR,
+        SRV_DISCONNECTED,
+        SRV_CONNECTED,
+        SRV_TIMEOUT,
+        SRV_ERROR,
         CLOSED_BY_SERVER
     };
     using ResponseCallback = std::function<void(const nlohmann::json& response)>;
     using ErrorCallback = std::function<void(const std::string& error)>;
 
-    JsonRpcClient();
+    JsonRpcClient(const char *szThreadName);
     ~JsonRpcClient();
 
-    bool Connect(const std::string& sServerAddress, unsigned short nPort);
+    void setServerInfo(const std::string& sServerAddress, unsigned short nServerPort);
+    bool Connect();
     void Disconnect();
     ConnectionState GetConnectionState() const noexcept { return m_connectionState; }
 
@@ -106,7 +122,6 @@ public:
     void SetErrorCallback(const ErrorCallback &callback) noexcept { m_errorCallback = callback; }
     void SetConnectionState(const ConnectionState state, const char *szError = nullptr) noexcept;
 
-    void EnterEventLoop();
     void BreakEventLoop();
 
     template <typename T>
@@ -126,17 +141,23 @@ public:
         return call_method(id, name, params).result.get<T>();
     }
     static JsonRpcNotify ParseJsonRpcNotify(const nlohmann::json &j);
+    bool addSyncRequestId(const id_type requestId);
+    bool removeSyncRequestId(const id_type requestId);
+    bool handleReceivedId(const id_type &requestId);
+
+	void execute() override;
 
 protected:
     void FreeConnection();
     bool Send(std::string &error, const std::string& request);
+    bool SendAndReceive(std::string &error, const std::string& request, const id_type requestId);
 
 private:
     rpcVersion m_rpcVersion;
     std::string m_sServerAddress;
-    unsigned short m_nPort;
-    struct event_base* m_eventBase;
-    struct bufferevent * m_bufferEvent;
+    unsigned short m_nServerPort;
+    struct event_base* m_pEventBase;
+    struct bufferevent* m_bufferEvent;
     std::string m_sResponseBuffer;
     std::optional<nlohmann::json> m_responseJson;
     std::string m_sError;
@@ -144,9 +165,15 @@ private:
     ErrorCallback m_errorCallback;
     ConnectionState m_connectionState;
     bool m_bSyncRequestPending;
+	std::condition_variable m_cvSyncRequest;
+	std::mutex m_SyncRequestMutex;
+    std::unordered_set<id_type> m_IdSent;
+	std::unordered_set<id_type> m_IdReceived;
+	std::mutex m_IdMutex;
+	bool m_bBreakEventLoop;
 
     static void OnEventCallback(struct bufferevent* bev, short events, void* pContext);
-    static void OnDataReceived(struct bufferevent* bev, void* pContext);
+    static void bev_callback(struct bufferevent* bev, void* pContext);
     static std::optional<nlohmann::json> ParseJsonObject(const std::string& sJson, std::string &error);
 
     JsonRpcResponse call_method(const id_type &id, const std::string &name, const nlohmann::json &params);

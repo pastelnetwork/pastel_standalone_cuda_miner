@@ -7,6 +7,7 @@
 #include <src/equihash/block.h>
 #include <src/utils/arith_uint256.h>
 #include <src/utils/streams.h>
+#include <src/utils/logger.h>
 #include <blake2b.h>
 #include <tinyformat.h>
 
@@ -33,7 +34,7 @@ bool CheckEquihashSolution(const CBlockHeader &block)
     const bool isValid = EquihashType::IsValidSolution(state, block.nSolution);
     if (!isValid)
     {
-        cerr << "CheckEquihashSolution - Invalid solution" << endl;
+        spdlog::error("CheckEquihashSolution - Invalid solution");
         return false;
     }
     return true;
@@ -80,4 +81,18 @@ bool CheckProofOfWork(const uint256& hashBlock, unsigned int nBits, const uint25
     }
 
     return true;
+}
+
+// Check whether the miner solution is below the target
+bool CheckMinerSolution(const uint256& hashBlock, const arith_uint256& target)
+{
+	if (UintToArith256(hashBlock) > target)
+	{
+		string sLog = strprintf("CheckMinerSolution - hash = %s, target = %s\n",
+			hashBlock.ToString(),
+			ArithToUint256(target).ToString());
+        spdlog::debug(sLog);
+		return false;
+	}
+	return true;
 }

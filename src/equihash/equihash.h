@@ -15,9 +15,9 @@ template<unsigned int N, unsigned int K>
 class EquihashSolver : public Equihash<N, K>
 {
 public:
-    bool InitializeState(blake2b_state &state, const std::string &sPersString);
+    bool InitializeState(blake2b_state &state, const std::string &sPersString) const;
 
-    bool IsValidSolution(std::string &error, const blake2b_state& base_state, const v_uint8 &soln);
+    bool IsValidSolution(std::string &error, const blake2b_state& base_state, const v_uint8 &soln) const;
 };
 
 // the maximum number of solutions that can be found by the miner

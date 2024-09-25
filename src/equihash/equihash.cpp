@@ -3,9 +3,11 @@
 // file COPYING or https://www.opensource.org/licenses/mit-license.php.
 #include <cstdint>
 #include <vector>
-#include <endian.h>
+#include <compat.h>
+#include <compat/endian.h>
 
 #include <tinyformat.h>
+
 #include <blake2b.h>
 #include <src/equihash/equihash.h>
 #include <src/equihash/blake2b_host.h>
@@ -15,10 +17,11 @@
 using namespace std;
 
 template<unsigned int N, unsigned int K>
-bool EquihashSolver<N, K>::InitializeState(blake2b_state &state, const string &sPersString)
+bool EquihashSolver<N, K>::InitializeState(blake2b_state &state, const string &sPersString) const
 {
     if (sPersString.length() != Equihash<N, K>::PERS_STRING_LENGTH)
         return false;
+	memset(&state, 0, sizeof(state));
     uint8_t personalization[BLAKE2B_PERSONALBYTES] = {0};
     memcpy(personalization, sPersString.c_str(), sPersString.length());
     const uint32_t constN = Equihash<N, K>::WN;
@@ -33,39 +36,40 @@ bool EquihashSolver<N, K>::InitializeState(blake2b_state &state, const string &s
 }
 
 template<unsigned int N, unsigned int K>
-bool EquihashSolver<N, K>::IsValidSolution(string &error, const blake2b_state& base_state, const v_uint8 &soln)
+bool EquihashSolver<N, K>::IsValidSolution(string &error, const blake2b_state& base_state, const v_uint8 &soln) const
 {
-    if (soln.size() != Equihash<N, K>::SolutionWidth)
+	using EquihashType = Equihash<N, K>;
+    if (soln.size() != EquihashType::SolutionWidth)
     {
         error = strprintf("Invalid solution length: %d (expected %d)\n",
-                 soln.size(), Equihash<N, K>::SolutionWidth);
+                 soln.size(), EquihashType::SolutionWidth);
         return false;
     }
 
-    vector<FullStepRow<Equihash<N, K>::FinalFullWidth>> X;
-    X.reserve(Equihash<N, K>::ProofSize);
-    uint8_t tmpHash[Equihash<N, K>::HashOutput];
-    v_uint32 vIndices = GetIndicesFromMinimal(soln, Equihash<N, K>::CollisionBitLength);
+    vector<FullStepRow<EquihashType::FinalFullWidth>> X;
+    X.reserve(EquihashType::ProofSize);
+    uint8_t tmpHash[EquihashType::HashOutput];
+    v_uint32 vIndices = GetIndicesFromMinimal(soln, EquihashType::CollisionBitLength);
     for (eh_index i : vIndices)
     {
-        GenerateHash(base_state, i/Equihash<N, K>::IndicesPerHashOutput, tmpHash, sizeof(tmpHash));
-        X.emplace_back(tmpHash+((i % Equihash<N, K>::IndicesPerHashOutput) * N/8),
-                       N/8, Equihash<N, K>::HashLength, Equihash<N, K>::CollisionBitLength, i);
+        GenerateHash(base_state, i/EquihashType::IndicesPerHashOutput, tmpHash, sizeof(tmpHash));
+        X.emplace_back(tmpHash+((i % EquihashType::IndicesPerHashOutput) * N / 8),
+                       N / 8, EquihashType::HashLength, EquihashType::CollisionBitLength, i);
     }
 
-    size_t hashLen = Equihash<N, K>::HashLength;
+    size_t hashLen = EquihashType::HashLength;
     size_t lenIndices = sizeof(eh_index);
-    const int iColByteLength = static_cast<const int>(Equihash<N, K>::CollisionByteLength);
+    constexpr int iColByteLength = static_cast<const int>(EquihashType::CollisionByteLength);
     while (X.size() > 1)
     {
-        vector<FullStepRow<Equihash<N, K>::FinalFullWidth>> Xc;        
+        vector<FullStepRow<EquihashType::FinalFullWidth>> Xc;        
         for (int i = 0; i < X.size(); i += 2)
         {
-            if (!HasCollision(X[i], X[i + 1], Equihash<N, K>::CollisionByteLength))
+            if (!HasCollision(X[i], X[i + 1], EquihashType::CollisionByteLength))
             {
                 error = strprintf(
 R"(Invalid solution: invalid collision length between StepRows
-X[i] = %s,
+X[  i] = %s,
 X[i+1] = %s)", X[i].GetHex(hashLen), X[i + 1].GetHex(hashLen));
                 return false;
             }
@@ -82,7 +86,7 @@ X[i+1] = %s)", X[i].GetHex(hashLen), X[i + 1].GetHex(hashLen));
             Xc.emplace_back(X[i], X[i + 1], hashLen, lenIndices, iColByteLength);
         }
         X = Xc;
-        hashLen -= Equihash<N, K>::CollisionByteLength;
+        hashLen -= EquihashType::CollisionByteLength;
         lenIndices *= 2;
     }
 
@@ -90,5 +94,4 @@ X[i+1] = %s)", X[i].GetHex(hashLen), X[i + 1].GetHex(hashLen));
     return X[0].IsZero(hashLen);
 }
 
-template class FullStepRow<Eh200_9::FinalFullWidth>;
 template class EquihashSolver<200, 9>;

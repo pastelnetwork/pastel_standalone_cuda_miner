@@ -58,8 +58,8 @@ public:
     // The number of bits used to represent a single digit in the Equihash solution
     static inline constexpr uint32_t CollisionBitLength = N / (K + 1); // DIGITBITS=20
     // The number of bytes used to store a single digit of the collision bits.
-    static inline constexpr uint32_t CollisionByteLength = (CollisionBitLength + 7) / 8;
-    static inline constexpr uint32_t CollisionBitMask = (1 << CollisionBitLength) - 1;
+	static inline constexpr uint32_t CollisionByteLength = (CollisionBitLength + 7) / 8; // DIGITBYTES=3
+	static inline constexpr uint32_t CollisionBitMask = (1 << CollisionBitLength) - 1; // DIGITMASK=0xfffff
     static inline constexpr uint32_t CollisionBitMaskWordPadding = std::numeric_limits<uint32_t>::digits - CollisionBitLength; 
     // The length in bytes of a hash used during the (K+1)-th collision round.
     static inline constexpr uint32_t HashLength = (K + 1) * CollisionByteLength;
@@ -81,24 +81,26 @@ public:
     // the total number of hashes words required for the equihash algorithm
     static inline constexpr uint32_t NHashWords = NHashes * HashWords; // 14'680'064
     static inline constexpr uint32_t NBucketCount = 2'048;
-    static inline constexpr uint32_t NBucketCountStorageSize = NBucketCount * sizeof(uint32_t);
-    static inline constexpr uint32_t NExtraHashesPerBucket = 126;
+	static inline constexpr uint32_t NBucketCountStorageSize = NBucketCount * sizeof(uint32_t); // 8'192
+    static inline constexpr uint32_t NExtraHashesPerBucket = 135;
     static inline constexpr uint32_t NBucketSize = (NHashes + NBucketCount - 1) / NBucketCount; // 1'024
-    static inline constexpr uint32_t NBucketSizeExtra = NBucketSize + NExtraHashesPerBucket; // 1'150
+	static inline constexpr uint32_t NBucketSizeExtra = NBucketSize + NExtraHashesPerBucket; // 1'159
     static inline constexpr uint32_t NBucketSizeExtraBoolMaskSize = NBucketSizeExtra * sizeof(bool);
     static inline constexpr uint32_t NBucketIdxBits = COUNT_BITS(NBucketCount - 1); // 11
     static inline constexpr uint32_t NBucketIdxMask = NBucketCount - 1; // 2'047
-    static inline constexpr uint32_t CollisionThreadsPerBlock = 256;
-    static inline constexpr uint32_t NCollisionIndexBits = 11;
-    static inline constexpr uint32_t NCollisionIndexBitMask = (1 << NCollisionIndexBits) - 1; // 2'047
     static inline constexpr uint32_t NHashStorageCount = NBucketCount * NBucketSizeExtra; // 2'048 * 1'150 = 2'355'200
     static inline constexpr uint32_t NHashStorageWords = NBucketCount * NBucketSizeExtra * HashWords; // 2'330'200 * 7 = 16'486'400
 
-    // __shared__ uint64_t sharedProcessed[threadsPerBlock * maskArraySize];
+	static inline constexpr uint32_t NRestBits = CollisionBitLength - NBucketIdxBits; // 9
+	static inline constexpr uint32_t NRestBitsMask = (1 << NRestBits) - 1; // 511
+    // The number of 32-bit words needed to store the hash output
+	static inline constexpr uint32_t HashWordsEx = WK + 1; // 10
+	static inline constexpr uint32_t NHashStorageWordsEx = NHashStorageCount * HashWordsEx; // 2'355'200 * 10 = 23'552'000
 
     using solution_type = struct
     {
         eh_index indices[ProofSize];
+        eh_index mainIndex;
     };
 
 private:

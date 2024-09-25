@@ -11,6 +11,7 @@
 #include <src/equihash/blake2b_host.h>
 #include <src/equihash/equihash.h>
 #include <src/kernel/blake2b_device.h>
+#include <src/kernel/byteswap.h>
 #include <src/utils/strencodings.h>
 
 using namespace std;
@@ -24,7 +25,6 @@ __global__ void blake2b_hash_kernel(blake2b_state* state, const uint8_t* input, 
     // Finalize the hash and store the result in output
     blake2b_final_device(state, output, BLAKE2B_OUTBYTES);
 }
-
 
 class Blake2bCudaTest : public TestWithParam<tuple<string, string>>
 {

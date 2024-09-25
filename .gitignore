@@ -1,4 +1,6 @@
 build/
 depends/
+bin/
+build-aux/
 .idea
 .env

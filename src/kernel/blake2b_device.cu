@@ -4,6 +4,8 @@
 #include <cassert>
 #include <cstdio>
 
+#include <cuda_runtime.h>
+
 #include <src/kernel/memutils.h>
 #include <blake2b.h>
 
@@ -131,6 +133,16 @@ __device__ bool blake2b_init_device(blake2b_state *state, size_t outlen)
     return true;
 }
 
+#define ROUND(r) \
+    G(r, 0, v[0], v[4], v[8], v[12], m);  \
+    G(r, 1, v[1], v[5], v[9], v[13], m);  \
+    G(r, 2, v[2], v[6], v[10], v[14], m); \
+    G(r, 3, v[3], v[7], v[11], v[15], m); \
+    G(r, 4, v[0], v[5], v[10], v[15], m); \
+    G(r, 5, v[1], v[6], v[11], v[12], m); \
+    G(r, 6, v[2], v[7], v[8], v[13], m);  \
+    G(r, 7, v[3], v[4], v[9], v[14], m);
+
 __device__ void blake2b_compress_device(blake2b_state *state, const uint8_t *block)
 {
     uint64_t m[16];
@@ -149,17 +161,18 @@ __device__ void blake2b_compress_device(blake2b_state *state, const uint8_t *blo
     v[15] = state->f[1] ^ blake2b_IV[7];
 
     // Mixing rounds
-    for (int r = 0; r < 12; ++r)
-    {
-        G(r, 0, v[0], v[4], v[8], v[12], m);
-        G(r, 1, v[1], v[5], v[9], v[13], m);
-        G(r, 2, v[2], v[6], v[10], v[14], m);
-        G(r, 3, v[3], v[7], v[11], v[15], m);
-        G(r, 4, v[0], v[5], v[10], v[15], m);
-        G(r, 5, v[1], v[6], v[11], v[12], m);
-        G(r, 6, v[2], v[7], v[8], v[13], m);
-        G(r, 7, v[3], v[4], v[9], v[14], m);
-    }
+    ROUND(0);
+	ROUND(1);
+	ROUND(2);
+	ROUND(3);
+	ROUND(4);
+	ROUND(5);
+	ROUND(6);
+	ROUND(7);
+	ROUND(8);
+	ROUND(9);
+	ROUND(10);
+	ROUND(11);
 
     for (size_t i = 0; i < 8; ++i)
         state->h[i] ^= (v[i] ^ v[i + 8]);
@@ -173,8 +186,8 @@ __device__ void blake2b_update_device(blake2b_state *state, const void *pin, siz
         return;
 
     // If there's already data in the buffer, and the new data fills it
-    size_t left = state->buflen;
-    size_t fill = BLAKE2B_BLOCKBYTES - left;
+    const size_t left = state->buflen;
+    const size_t fill = BLAKE2B_BLOCKBYTES - left;
     if (inlen > fill)
     {
         state->buflen = 0;

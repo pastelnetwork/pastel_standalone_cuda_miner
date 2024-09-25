@@ -1,23 +1,39 @@
-# pastel_standalone_cuda_miner
+# pastel-miner
+
+Pastel CUDA Miner uses cmake build system.
+Some dependent projects are used (automatically downloaded and built by cmake):
+ - LibEvent
+ - Google Test library
+ - spdlog
 
 Windows Build:
 
-- LibEvent library build and configure:
-  - download and extract libevent to ./depends/libevent
-  - execute:
-  cmake -S . -B build -DCMAKE_INSTALL_PREFIX=./bin
-  cmake --build ./build --config Release --parallel
-  cmake --install build
+Use presets to generate Visual Studio 2022 projects (Debug or Release):
+ cmake --preset vs2022_dbg
+ cmake --preset vs2022
 
-cmake --build ./build -DCMAKE_DEBUG_POSTFIX --parallel
+Projects will be generated in [build-aux/vs2022/Release] or [build-aux/vs2022/Debug].
+Run from that folder [cmake --build .] to build pastel_miner.
+Binary will be moved to [bin/Debug] or [bin/Release] folder.
 
-- Google Test libraries build and configure:
-  - download and extract gtest to ./depends/gtest
-  - execute:
-  cmake -S . -B build -DCMAKE_INSTALL_PREFIX=./bin
-  cmake --build ./build --config Release --parallel
-  cmake --install build
+Linux Build:
 
-generate cmake project for Visual Studio 2022:
-cmake -S . -B build-aux -G "Visual Studio 17 2022" -DLibEvent_ROOT="./depends/libevent/bin" -DGTest_ROOT="./depends/gtest/bin"
+Use presets to generate Linux makefiles:
+ cmake --preset linux
+ cmake --preset linux_dbg
 
+Project files will be generated in [build-aux/linux/release] or [build-aux/linux/debug].
+Run [cmake --build .] from these folders to build pastel_miner.
+
+
+Configuration file pastel_miner.conf is required to run Pastel Miner:
+# s-nomp server address, default: localhost
+server=<ip_address>
+# s-nomp server port, default: 3255
+port=3255
+
+# miner address
+miner_address=<miner_address>.<miner_external_ip_address>
+
+# pool authentication password
+auth_password=<password>

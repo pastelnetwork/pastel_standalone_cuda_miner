@@ -8,43 +8,61 @@
 
 #include <src/utils/str_utils.h>
 #include <src/utils/strencodings.h>
-#include <src/utils/streams.h>
-#include <src/utils/serialize.h>
+#include <src/utils/logger.h>
 #include <src/equihash/block.h>
+#include <src/equihash/equihash.h>
 #include <src/stratum/client.h>
-#include <src/stratum/miner.h>
 
 using namespace std;
 using namespace std::chrono_literals;
 
 using json = nlohmann::json;
 
-constexpr auto POOL_RECONNECT_INTERVAL_SECS = 15s;
-
-unique_ptr<CMiningThread> gl_MiningThread;
-
-CStratumClient::CStratumClient(const std::string& sServerAddress, unsigned short nPort) :
-    m_sServerAddress(sServerAddress),
-    m_nPort(nPort),
+CStratumClient::CStratumClient() :
+    m_JsonRpcClient("stm-client"),
+    m_nServerPort(0),
     m_nRequestId(0),
     m_bCleanJobs(false),
     N(200),
     K(9),
     m_difficulty(0),
-    m_bConnected(false)
+    m_bConnected(false),
+	m_nMinerId(0)
 {}    
 
 CStratumClient::~CStratumClient()
 {
+    if (m_pMiningThread)
+		m_pMiningThread->waitForStop();
     disconnect();
+}
+
+bool CStratumClient::initMiningThread(string &error)
+{
+    // start miner in a separate thread
+    m_pMiningThread = make_unique<CMiningThread>(this);
+    if (!m_pMiningThread->start(error))
+    {
+		string excError = "Failed to start mining thread: " + error;
+        gl_console_logger->error(excError);
+        return false;
+    }
+	return true;
+}
+
+void CStratumClient::setServerInfo(const string& sServerAddress, unsigned short nServerPort)
+{
+    m_sServerAddress = sServerAddress;
+    m_nServerPort = nServerPort;
+	m_JsonRpcClient.setServerInfo(sServerAddress, nServerPort);
 }
 
 bool CStratumClient::connect()
 {
-    cout << "Connecting to [" << m_sServerAddress << ":" << m_nPort << "]" << endl;
-    if (!m_JsonRpcClient.Connect(m_sServerAddress, m_nPort))
+	gl_console_logger->info("Connecting to [{}:{}]", m_sServerAddress, m_nServerPort);
+    if (!m_JsonRpcClient.Connect())
         return false;
-    cout << "...connected" << endl;
+	gl_console_logger->info("...connected");
     return true;
 }
 
@@ -54,9 +72,10 @@ void CStratumClient::disconnect()
     m_bConnected = false;
 }
 
-void  CStratumClient::setAuthInfo(const string& sWorkerName, const string& sWorkerPassword)
+void  CStratumClient::setAuthInfo(const size_t nMinerId, const string& sWorkerName, const string& sWorkerPassword)
 {
-    m_sWorkerName = sWorkerName;
+	m_nMinerId = nMinerId;
+    m_sWorkerName = strprintf("%s_%d", sWorkerName, m_nMinerId);
     m_sWorkerPassword = sWorkerPassword;
 }
 
@@ -73,15 +92,27 @@ void  CStratumClient::setAuthInfo(const string& sWorkerName, const string& sWork
  */
 bool CStratumClient::authorize()
 {
-    cout << "Authorizing with the pool..."  << endl;
-    bool bResult = m_JsonRpcClient.CallMethod<bool>(
-        ++m_nRequestId,
-        "mining.authorize", 
-        { m_sWorkerName, m_sWorkerPassword });
+	if (m_sWorkerName.empty() || m_sWorkerPassword.empty())
+	{
+		gl_console_logger->error("Worker name or password is not set");
+		return false;
+	}
+	gl_console_logger->info("{} authorizing with the pool...", m_sWorkerName);
+	bool bResult = false;
+    try
+    {
+        bResult = m_JsonRpcClient.CallMethod<bool>(
+            ++m_nRequestId,
+            "mining.authorize",
+            { m_sWorkerName, m_sWorkerPassword });
+    } catch (const JsonRpcException& e)
+    {
+        gl_console_logger->error("JsonRpcException: {}", e.what());
+    }
     if (bResult)
-        cout << "...successfully authorized" << endl;
+		gl_console_logger->info("...successfully authorized {}", m_sWorkerName);
     else
-        cerr << "Failed to authorize with the pool" << endl;
+		gl_console_logger->error("Failed to authorize with the pool worker {}", m_sWorkerName);
     return bResult;
 }
 
@@ -103,19 +134,24 @@ bool CStratumClient::authorize()
  */
 bool CStratumClient::subscribe()
 {
-    cout << "Subscribing to the pool..." << endl;
-    auto result = m_JsonRpcClient.CallMethod<json::array_t>(
-        ++m_nRequestId,
-        "mining.subscribe");
-    if (result.size() > 0)
+    gl_console_logger->info("Subscribing to the pool...");
+    try
     {
-        string sExtraNonce1 = result[1].get<std::string>();
-        // convert hex string to uint32
-        m_nExtraNonce1 = stoul(sExtraNonce1, nullptr, 16);
-        cout << "...successfully subscribed, extraNonce1=[0x" << sExtraNonce1 << "]" << endl;
-        return true;
+        auto result = m_JsonRpcClient.CallMethod<json::array_t>(
+            ++m_nRequestId,
+            "mining.subscribe");
+        if (result.size() > 0)
+        {
+            string sExtraNonce1 = result[1].get<std::string>();
+            // convert hex string to uint32
+            const uint32_t nExtraNonce1 = ConvertHexToUint32LE(sExtraNonce1);
+            gl_console_logger->info("...successfully subscribed, extraNonce1=[0x{:x}]", nExtraNonce1);
+            m_pMiningThread->setExtraNonce1(nExtraNonce1);
+            return true;
+        }
+    } catch (const JsonRpcException& e) {
+        gl_console_logger->error("Failed to subscribe to the pool. {}", e.what());
     }
-    cerr << "Failed to subscribe to the pool" << endl;
     return false;
 }
 
@@ -132,13 +168,13 @@ bool CStratumClient::reconnect()
 
     if (!authorize())
     {
-        cerr << "Failed to authorize with the pool" << endl;
+		gl_console_logger->error("Failed to authorize with the pool");
         return false;
     }
 
     if (!subscribe())
     {
-        cerr << "Failed to subscribe to the pool" << endl;
+		gl_console_logger->error("Failed to subscribe to the pool");
         return false;
     }
 
@@ -164,18 +200,19 @@ bool CStratumClient::reconnect()
  * \param sHexSolution - the solution in hex format
  * \return true if the solution was accepted by the pool, false otherwise
  */
-bool CStratumClient::submitSolution(const uint32_t nExtraNonce2, const string& sTime, const string &sHexSolution)
+bool CStratumClient::submitSolution(const string& sNonce2, const string& sTime, const string &sHexSolution)
 {
     if (!m_bConnected)
         return false;
 
-    auto params = json::array({m_sWorkerName, m_sJobId, sTime, HexStr(nExtraNonce2), sHexSolution});
-    bool bResult = m_JsonRpcClient.CallMethod<bool>(++m_nRequestId, "mining.submit", params);
-    if (bResult)
-        cout << "Solution accepted by the pool" << endl;
-    else
-        cerr << "Solution rejected by the pool" << endl;
-    return bResult;
+    auto params = json::array({
+        m_sWorkerName,
+        m_sJobId,
+        sTime,
+        sNonce2,
+        sHexSolution
+    });
+    return m_JsonRpcClient.CallMethod<bool>(++m_nRequestId, "mining.submit", params);
 }
 
 bool CStratumClient::getDifficulty()
@@ -200,6 +237,25 @@ bool CStratumClient::setDifficulty(double difficulty)
     return bResult;
 }
 
+void CStratumClient::handleSetTargetNotify(const JsonRpcNotify& notify)
+{
+    const auto &params = notify.params;
+    if (params.is_null() || !params.is_array() || params.empty())
+	{
+		gl_console_logger->error("{}: invalid number of parameters", notify.method);
+		return;
+	}
+    string error;
+    string sNewTarget = params[0].get<std::string>();
+    // validate new target
+	if (!parse_uint256(error, m_NewTarget, sNewTarget, "target"))
+	{
+		gl_console_logger->error("{}: invalid target value, {}", notify.method, error);
+		return;
+	}
+	gl_console_logger->info("New target: {}", sNewTarget);
+}
+
 void CStratumClient::handleMiningNotify(const JsonRpcNotify &notify)
 {
     const auto &params = notify.params;
@@ -209,46 +265,48 @@ void CStratumClient::handleMiningNotify(const JsonRpcNotify &notify)
     }
     if (params.size() < 12)
     {
-        cerr << notify.method << ": invalid number of parameters (less than 12)" << endl;
+		gl_console_logger->error("{}: invalid number of parameters (less than 12)", notify.method);
         return;
     }
     const auto fnValidateHashParam = [&](const char *szHashDesc, const json& v, uint256 &hash) -> bool
     {
         if (!v.is_string())
         {
-            cerr << notify.method << ": invalid " << szHashDesc << " hash value" << endl;
+			gl_console_logger->error("{}: invalid {} hash value", notify.method, szHashDesc);
             return false;
         }
         string error;
         string sHashValue = v.get<std::string>();
         if (!parse_uint256(error, hash, sHashValue, szHashDesc))
         {
-            cerr << notify.method << ": invalid " << szHashDesc << " hash value, " << error << endl;
+			gl_console_logger->error("{}: invalid {} hash value, {}", notify.method, szHashDesc, error);
             return false;
         }
+        hash.Reverse();
         return true;
     };
     const auto &v = params[0];
     if (!v.is_string())
     {
-        cerr << notify.method << ": invalid job ID" << endl;
+		gl_console_logger->error("{}: invalid job ID", notify.method);
         return;
     }
-    m_sJobId = v.get<std::string>();
-    m_blockHeader.Clear();
-    // block version parameter uint32_t LE
-    m_blockHeader.nVersion = stoul(params[1].get<std::string>(), nullptr, 16);
+    m_sNewJobId = v.get<std::string>();
+    auto& hdr = m_NewJobBlockHeader;
+    hdr.Clear();
+    // block version parameter (uint32_t) in big-endian hex format
+    hdr.nVersion = ConvertHexToUint32LE(params[1].get<std::string>());
 
-    if (!fnValidateHashParam("previous block", params[2], m_blockHeader.hashPrevBlock) ||
-        !fnValidateHashParam("merkle root", params[3], m_blockHeader.hashMerkleRoot) ||
-        !fnValidateHashParam("final sapling root", params[4], m_blockHeader.hashFinalSaplingRoot))
+    if (!fnValidateHashParam("previous block", params[2], hdr.hashPrevBlock) ||
+        !fnValidateHashParam("merkle root", params[3], hdr.hashMerkleRoot) ||
+        !fnValidateHashParam("final sapling root", params[4], hdr.hashFinalSaplingRoot))
     {
         return;
     }
-    // nTime uint32 LE
-    m_blockHeader.nTime = stoul(params[5].get<std::string>(), nullptr, 16);
-    // nBits uint32 LE
-    m_blockHeader.nBits = stoul(params[6].get<std::string>(), nullptr, 16);
+    // nTime uint32
+    hdr.nTime = ConvertHexToUint32LE(params[5].get<std::string>());
+    // nBits uint32
+    hdr.nBits = ConvertHexToUint32LE(params[6].get<std::string>());
     // clean jobs boolean flag
     m_bCleanJobs = params[7].get<bool>();
     
@@ -260,7 +318,7 @@ void CStratumClient::handleMiningNotify(const JsonRpcNotify &notify)
         size_t nPos = sAlgoNK.find('_');
         if (nPos == string::npos)
         {
-            cerr << notify.method << ": invalid algoNK value" << endl;
+			gl_console_logger->error("{}: invalid algoNK value", notify.method);
             return;
         }
         N = stoul(sAlgoNK.substr(0, nPos));
@@ -275,46 +333,36 @@ void CStratumClient::handleMiningNotify(const JsonRpcNotify &notify)
         m_sPersString = DEFAULT_EQUIHASH_PERS_STRING;
 
     // mnid string parameter
-    m_blockHeader.sPastelID = params[10].get<std::string>();
-    // previous merkle root signature - hex-encoded string
-    string sPrevMerkleRootSignature = params[11].get<std::string>();
-    if (!IsHex(sPrevMerkleRootSignature))
+    hdr.sPastelID = params[10].get<std::string>();
+    // previous merkle root signature - hex-encoded and base64-encoded string
+    string sPrevMerkleRootSignatureEncoded = params[11].get<std::string>();
+    if (!IsHex(sPrevMerkleRootSignatureEncoded))
     {
-        cerr << notify.method << ": invalid previous merkle root signature" << endl;
+		gl_console_logger->error("{}: invalid previous merkle root signature hex-encoding", notify.method);
         return;
     }
-    m_blockHeader.prevMerkleRootSignature = ParseHex(sPrevMerkleRootSignature);
-    cout << "New job received: " << m_sJobId << endl;
+    v_uint8 vMerkleRoot = ParseHex(sPrevMerkleRootSignatureEncoded);
+    bool bInvalidBase64Encoding = false;
+    hdr.prevMerkleRootSignature = DecodeBase64(vector_to_string(vMerkleRoot).c_str(), &bInvalidBase64Encoding);
+    if (bInvalidBase64Encoding)
+    { 
+		gl_console_logger->error("{}: invalid previous merkle root signature base64-encoding", notify.method);
+		return;
+	}
+	gl_console_logger->info("New job received for miner #{}: [\x1b[33m{}\x1b[0m], target: {}", 
+        m_nMinerId, m_sNewJobId, m_NewTarget.ToString());
+    gl_console_logger->info("mnid: {}", hdr.sPastelID);
 
-    // start new mining job in a separate thread
-    if (gl_MiningThread && gl_MiningThread->isRunning())
-        gl_MiningThread->waitForStop();
-    gl_MiningThread = make_unique<CMiningThread>(*this);
-
-    string error;
-    if (!gl_MiningThread->start(error))
-    {
-        cerr << "Failed to start mining thread: " << error << endl;
-    }
+	AssignNewJob();
+	m_pMiningThread->NewJobNotify();
 }
 
-v_uint8 CStratumClient::getEquihashInput() const noexcept
+void CStratumClient::AssignNewJob()
 {
-    CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
-    // calculate equihash input
-    ss.reserve(m_blockHeader.GetReserveSize());
-    ss << m_blockHeader;
-    v_uint8 v;
-    ss.extractData(v);
-    return v;
-}
-
-const uint256 CStratumClient::generateNonce(const uint32_t nExtraNonce2) noexcept
-{
-    m_blockHeader.nNonce.SetNull();
-    m_blockHeader.nNonce.SetUint32(0, m_nExtraNonce1);
-    m_blockHeader.nNonce.SetUint32(1, nExtraNonce2);
-    return m_blockHeader.nNonce;
+	auto& blockHeader = m_pMiningThread->getBlockHeader();
+	blockHeader = std::move(m_NewJobBlockHeader);
+	m_sJobId = std::move(m_sNewJobId);
+	m_target = UintToArith256(m_NewTarget);
 }
 
 void CStratumClient::handleNotify(const JsonRpcNotify &notify)
@@ -329,46 +377,58 @@ void CStratumClient::handleNotify(const JsonRpcNotify &notify)
         if (params.is_array() && params.size() >= 1)
         {
             m_difficulty = params[0].get<double>();
-            cout << "New difficulty: " << m_difficulty << endl;
+			gl_console_logger->info("[\x1b[33m{}\x1b[0m] new difficulty: {}", m_sNewJobId, m_difficulty);
         }
     }
     else if (notify.method == "mining.set_target")
     {
-        if (params.is_array() && params.size() >= 1)
-        {
-            m_sTarget = params[0].get<std::string>();
-            cout << "New target: " << m_sTarget << endl;
-        }
+        handleSetTargetNotify(notify);
     }
     else
     {
-        cerr << "Unknown notification from stratum pool: " << notify.method << endl;    
+		gl_console_logger->error("Unknown notification from stratum pool: {}", notify.method);
     }
 }
 
-void CStratumClient::handlingLoop()
+void CStratumClient::startHandlingLoop()
 {
     m_JsonRpcClient.SetResponseCallback([&](const json& j)
     {
         try
         {
-            const JsonRpcNotify jsonRpcNotfy = JsonRpcClient::ParseJsonRpcNotify(j);
-            handleNotify(jsonRpcNotfy);
+            const JsonRpcNotify jsonRpcNotify = JsonRpcClient::ParseJsonRpcNotify(j);
+			if (!m_JsonRpcClient.handleReceivedId(jsonRpcNotify.id))
+                handleNotify(jsonRpcNotify);
         }
         catch(const JsonRpcException& e)
         {
-            cerr << e.what() << endl;
+			gl_console_logger->error("JsonRpcException: {}", e.what());
         }
     });        
 
-    while (true)
-    {
-        if (!m_bConnected && !reconnect())
-        {
-            this_thread::sleep_for(POOL_RECONNECT_INTERVAL_SECS);
-            continue;
-        }
-
-        m_JsonRpcClient.EnterEventLoop();
-      }
+    string error;
+    if (!m_JsonRpcClient.start(error))
+	{
+		gl_console_logger->error("Failed to start stratum pool client. {}", error);
+		return;
+	}
 }
+
+void CStratumClient::breakHandlingLoop()
+{
+	disconnect();
+	m_JsonRpcClient.BreakEventLoop();
+    m_JsonRpcClient.waitForStop();
+}
+
+void CStratumClient::checkConnectionState()
+{
+    const auto state = m_JsonRpcClient.GetConnectionState();
+    if (state == JsonRpcClient::ConnectionState::SRV_DISCONNECTED ||
+        state == JsonRpcClient::ConnectionState::SRV_ERROR)
+		m_bConnected = false;
+
+    if (!m_bConnected)
+        reconnect();
+}
+

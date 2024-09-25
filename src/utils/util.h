@@ -5,3 +5,4 @@
 
 // rename thread
 void RenameThread(const char* szThreadName, void *pThreadNativeHandle = nullptr);
+bool SetupNetworking();
