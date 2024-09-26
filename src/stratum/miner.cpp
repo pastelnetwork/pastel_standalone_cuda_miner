@@ -211,7 +211,7 @@ uint32_t CMiningThread::miningLoop(const size_t nIterations)
         }
 		if (m_bStopCurrentJob)
 		{
-			gl_console_logger->debug("{} stopping current job", sJobId);
+			gl_console_logger->info("{} stopping current job", sJobId);
 			m_bStopCurrentJob = false;
 			return true;
 		}
@@ -245,6 +245,7 @@ uint32_t CMiningThread::miningLoop(const size_t nIterations)
             ++m_nExtraNonce2;
             continue;
         }
+        //gl_console_logger->info("{} solutions", nSolutionCount);
         m_nJobSolutions += nSolutionCount;
         m_nSolutions += nSolutionCount;
 

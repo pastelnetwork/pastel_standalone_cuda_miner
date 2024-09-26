@@ -206,12 +206,12 @@ devnet block 34'000 (block hash: 000d4814d59e4501228eedd221b720fc45dd49505584ad1
 
      size_t i = 0;
      auto pMiningThread = dynamic_cast<CTestMiningThread*>(stratumClient.getMiningThread());
-	 const auto& vHexSolutions = pMiningThread->vHexSolutions;
-     for (const auto& solution : vHexSolutions)
-     {
-         cout << "solution #" << i << ": " << solution << endl;
-         i++;
-     }
+	 //const auto& vHexSolutions = pMiningThread->vHexSolutions;
+  //   for (const auto& solution : vHexSolutions)
+  //   {
+  //       cout << "solution #" << i << ": " << solution << endl;
+  //       i++;
+  //   }
     // Check the solution count
     EXPECT_GT(solutionCount, 0);
     pMiningThread->stop();

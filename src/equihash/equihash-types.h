@@ -82,10 +82,9 @@ public:
     static inline constexpr uint32_t NHashWords = NHashes * HashWords; // 14'680'064
     static inline constexpr uint32_t NBucketCount = 2'048;
 	static inline constexpr uint32_t NBucketCountStorageSize = NBucketCount * sizeof(uint32_t); // 8'192
-    static inline constexpr uint32_t NExtraHashesPerBucket = 135;
+    static inline constexpr uint32_t NExtraHashesPerBucket = 500;
     static inline constexpr uint32_t NBucketSize = (NHashes + NBucketCount - 1) / NBucketCount; // 1'024
-	static inline constexpr uint32_t NBucketSizeExtra = NBucketSize + NExtraHashesPerBucket; // 1'159
-    static inline constexpr uint32_t NBucketSizeExtraBoolMaskSize = NBucketSizeExtra * sizeof(bool);
+	static inline constexpr uint32_t NBucketSizeExtra = NBucketSize + NExtraHashesPerBucket; // 1024 + 500 = 1524 
     static inline constexpr uint32_t NBucketIdxBits = COUNT_BITS(NBucketCount - 1); // 11
     static inline constexpr uint32_t NBucketIdxMask = NBucketCount - 1; // 2'047
     static inline constexpr uint32_t NHashStorageCount = NBucketCount * NBucketSizeExtra; // 2'048 * 1'150 = 2'355'200
