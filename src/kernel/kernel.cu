@@ -386,7 +386,7 @@ void EhDevice<EquihashType>::debugPrintBucketCounters(const uint32_t bucketIdx, 
 	string sInfo = strprintf("Round #%u [buckets %u/%u] hashes: ", round + 1, bucketIdx + 1, EquihashType::NBucketCount);
 	for (uint32_t i = 0; i < EquihashType::NBucketCount; ++i)
 		sInfo += to_string(vBucketCollisionCounts[i]) + " ";
-#ifdef _WIN32_
+#ifdef _WIN32
 	debug(sInfo);
 #else
 	printf(sInfo.c_str());
@@ -779,7 +779,13 @@ void EhDevice<EquihashType>::processCollisions()
 		uint32_t nDiscarded = 0;
 		copyToHost(&nDiscarded, d_discardedCounter.get(), sizeof(uint32_t));
         if (nDiscarded)
-			gl_console_logger->info("Round {} discarded: {}", round + 1, nDiscarded);
+        {
+#ifdef _WIN32
+            gl_console_logger->info("Round {} discarded: {}", round + 1, nDiscarded);
+#else
+			printf("Round %u discarded: %u\n", round + 1, nDiscarded);
+#endif
+        }
 		//v_uint32 vHashCount(EquihashType::NBucketCount);
 		//copyToHost(vHashCount.data(), d_bucketHashCounters.get() + (round + 1) * EquihashType::NBucketCount,
 		//	EquihashType::NBucketCount * sizeof(uint32_t));
@@ -1181,7 +1187,7 @@ void EhDevice<EquihashType>::debugPrintHashes(const bool bInitialHashes)
 
     uint32_t nDiscarded = 0;
     copyToHost(&nDiscarded, d_discardedCounter.get(), sizeof(uint32_t));
-#ifdef _WIN32_
+#ifdef _WIN32
 	debug("Discarded: %u", nDiscarded);
 #else
 	printf("Discarded: %u\n", nDiscarded);
@@ -1200,7 +1206,7 @@ void EhDevice<EquihashType>::debugPrintHashes(const bool bInitialHashes)
 		sLog = strprintf("\nInitial hashes (discarded - %u):\n", nDiscarded);
 	else
 		sLog = strprintf("\nHashes for round #%u (discarded - %u):\n", round + 1, nDiscarded);
-#ifdef _WIN32_
+#ifdef _WIN32
 	gl_console_logger->info(sLog);
 #else
 	printf(sLog.c_str());
@@ -1213,7 +1219,7 @@ void EhDevice<EquihashType>::debugPrintHashes(const bool bInitialHashes)
         size_t nBucketHashCount = vBucketHashCounters[bucketIdx];
         if (nBucketHashCount == 0)
             continue;
-#ifdef _WIN32_
+#ifdef _WIN32
         gl_console_logger->info("");
         if (bInitialHashes)
 			gl_console_logger->info("Initial bucket #{}, ({}) hashes:", bucketIdx, nBucketHashCount);
@@ -1250,7 +1256,7 @@ void EhDevice<EquihashType>::debugPrintHashes(const bool bInitialHashes)
             }
             if (bAllZeroes)
                 sLog += " (all zeroes)";
-#ifdef _WIN32_
+#ifdef _WIN32
 			gl_console_logger->info(sLog);
 #else
 			printf(sLog.c_str());
@@ -1332,7 +1338,7 @@ void EhDevice<EquihashType>::debugPrintCollisionPairs()
             vCollisionPairsOffsets.size() * sizeof(uint32_t));
 
     constexpr uint32_t COLLISIONS_PER_LINE = 10;
-#ifdef _WIN32_
+#ifdef _WIN32
 	debug("Collision pairs for round #{}:", round + 1);
 #else
 	printf("Collision pairs for round #%d:\n", round + 1);
@@ -1346,7 +1352,7 @@ void EhDevice<EquihashType>::debugPrintCollisionPairs()
         size_t nBucketCollisionCount = vBucketCollisionCounts[bucketIdx];
         if (nBucketCollisionCount == 0)
             continue;
-#ifdef _WIN32_
+#ifdef _WIN32
 		debug("Round %u, Bucket #%u, %zu collision pairs:", round + 1, bucketIdx, nBucketCollisionCount);
 #else
 		printf("Round %u, Bucket #%u, %zu collision pairs:\n", round + 1, bucketIdx, nBucketCollisionCount);
@@ -1371,10 +1377,10 @@ void EhDevice<EquihashType>::debugPrintCollisionPairs()
             {
                 if (i > 0)
                 {
-#ifdef _WIN32_
+#ifdef _WIN32
                     debug(sLog);
 #else
-		printf(sLog.c_str());
+		            printf(sLog.c_str());
 #endif
 					sLog.clear();
                 }
@@ -1384,10 +1390,10 @@ void EhDevice<EquihashType>::debugPrintCollisionPairs()
         }
         if (!sLog.empty())
         {
-#ifdef _WIN32_
+#ifdef _WIN32
             debug(sLog);
 #else
-		printf(sLog.c_str());
+		    printf(sLog.c_str());
 #endif
             sLog.clear();
         }
@@ -1402,7 +1408,7 @@ void EhDevice<EquihashType>::debugPrintCollisionPairs()
         if (vBucketCollisionCounts[i] > maxCollisionPairCount)
             maxCollisionPairCount = vBucketCollisionCounts[i];
     }
-#ifdef _WIN32_
+#ifdef _WIN32
 	debug("Max collision pair offset: %u, max collision pair count: %u", maxCollisionPairOffset, maxCollisionPairCount);
 #else
 	printf("Max collision pair offset: %u, max collision pair count: %u\n", maxCollisionPairOffset, maxCollisionPairCount);
