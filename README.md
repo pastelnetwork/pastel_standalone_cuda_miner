@@ -1,4 +1,4 @@
-# pastel-miner
+# Pastel Standalone CUDA Miner
 
 Pastel CUDA Miner uses cmake build system.
 Some dependent projects are used (automatically downloaded and built by cmake):
