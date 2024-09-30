@@ -27,6 +27,7 @@ Run [cmake --build .] from these folders to build pastel_miner.
 
 
 Configuration file pastel_miner.conf is required to run Pastel Miner:
+```ini
 # s-nomp server address, default: localhost
 server=<ip_address>
 # s-nomp server port, default: 3255
