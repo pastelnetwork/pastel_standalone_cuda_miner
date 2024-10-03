@@ -1,40 +1,51 @@
 # Pastel Standalone CUDA Miner
 
-Pastel CUDA Miner uses cmake build system.
-Some dependent projects are used (automatically downloaded and built by cmake):
+The Pastel CUDA Miner uses the CMake build system.
+Several dependent projects are used (automatically downloaded and built by CMake):
  - LibEvent
- - Google Test library
+ - Google Test Library
  - spdlog
 
-Windows Build:
+## Windows Build
 
-Use presets to generate Visual Studio 2022 projects (Debug or Release):
- cmake --preset vs2022_dbg
- cmake --preset vs2022
+Use the following presets to generate Visual Studio 2022 projects (Debug or Release):
+```
+cmake --preset vs2022_dbg
+cmake --preset vs2022
+```
+The projects will be generated in `[build-aux/vs2022/Release]` or `[build-aux/vs2022/Debug]`.
+Run the following command from that folder to build `pastel_miner`:
+```
+cmake --build .
+```
+The binary will be moved to the `[bin/Debug]` or `[bin/Release]` folder.
 
-Projects will be generated in [build-aux/vs2022/Release] or [build-aux/vs2022/Debug].
-Run from that folder [cmake --build .] to build pastel_miner.
-Binary will be moved to [bin/Debug] or [bin/Release] folder.
+## Linux Build
 
-Linux Build:
+Use the following presets to generate Linux makefiles:
+```
+cmake --preset linux
+cmake --preset linux_dbg
+```
+The project files will be generated in `[build-aux/linux/release]` or `[build-aux/linux/debug]`.
+Run the following command from these folders to build `pastel_miner`:
+```
+cmake --build .
+```
 
-Use presets to generate Linux makefiles:
- cmake --preset linux
- cmake --preset linux_dbg
+## Configuration
 
-Project files will be generated in [build-aux/linux/release] or [build-aux/linux/debug].
-Run [cmake --build .] from these folders to build pastel_miner.
+The configuration file `pastel_miner.conf` is required to run Pastel Miner. The structure is as follows:
 
-
-Configuration file pastel_miner.conf is required to run Pastel Miner:
 ```ini
-# s-nomp server address, default: localhost
+# s-nomp server address (default: localhost)
 server=<ip_address>
-# s-nomp server port, default: 3255
+
+# s-nomp server port (default: 3255)
 port=3255
 
-# miner address
+# Miner address
 miner_address=<miner_address>.<miner_external_ip_address>
 
-# pool authentication password
+# Pool authentication password
 auth_password=<password>
